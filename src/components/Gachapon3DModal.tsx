@@ -680,9 +680,10 @@ export const Gachapon3DModal: React.FC<Gachapon3DModalProps> = ({
 
     function afterDraw(cb: () => void) {
       if (disposed) return;
+      const delayMs = anim.active ? 16 : 80;
       const gl = renderer.getContext() as WebGL2RenderingContext;
       if (!gl || typeof gl.fenceSync !== 'function') {
-        frameId = window.setTimeout(cb, 80);
+        frameId = window.setTimeout(cb, delayMs);
         return;
       }
       const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
@@ -697,7 +698,7 @@ export const Gachapon3DModal: React.FC<Gachapon3DModalProps> = ({
           frameId = window.setTimeout(poll, 5);
         } else {
           if (sync) gl.deleteSync(sync);
-          frameId = window.setTimeout(cb, 80);
+          frameId = window.setTimeout(cb, delayMs);
         }
       };
       frameId = window.setTimeout(poll, 5);
@@ -838,7 +839,7 @@ export const Gachapon3DModal: React.FC<Gachapon3DModalProps> = ({
 
     function tick() {
       if (disposed) return;
-      const dt = Math.min(clock.getDelta(), 0.05);
+      const dt = Math.min(clock.getDelta(), 0.14);
       controls.update();
       if (anim.active) {
         stepSpinAnimation(dt);
