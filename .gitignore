@@ -1,0 +1,17 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+firebase-applet-config.json
+.agents/
+.antigravity/
+.vscode/
+DRAFT_firestore.rules
+public/assets/aistudio/
+*.mp4
+*.webm
+*.wav

@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-canvas: #FFFDF8;
+    --bg-subtle: #FAF5EC;
+    --bg-card: #FFFFFF;
+    --border-warm: #EAE2D3;
+    --text-main: #3A3128;
+    --text-muted: #6E6254;
+    --color-leaf: #2F7A54;
+    --color-leaf-soft: #EDF7F0;
+    --color-sage: #2B6E6B;
+    --color-sage-soft: #EAF5F4;
+    --color-sun: #C86428;
+    --color-sun-soft: #FFF3E6;
+    --color-safety: #B83227;
+    --color-safety-soft: #FDF1F0;
+  }
+
+  body {
+    font-family: 'M PLUS Rounded 1c', 'Zen Maru Gothic', 'Hiragino Maru Gothic ProN', sans-serif;
+    background-color: var(--bg-canvas);
+    color: var(--text-main);
+    line-height: 1.72;
+    letter-spacing: 0.01em;
+  }
+
+  h1, h2, h3, h4, .font-heading, .child-game-text {
+    font-family: 'Zen Maru Gothic', 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', sans-serif;
+  }
+
+  button, input, select, textarea {
+    font-family: inherit;
+  }
+
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  button:focus-visible,
+  a:focus-visible {
+    outline: 2px solid rgba(47, 122, 84, 0.45);
+    outline-offset: 2px;
+  }
+
+  ruby rt {
+    font-size: 0.64em;
+    color: #6E6254;
+    font-weight: 500;
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background-color: #FFFFFF !important;
+    color: #2B241D !important;
+  }
+  .print-sheet {
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+}

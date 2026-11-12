@@ -1,0 +1,889 @@
+{
+  "entities": {
+    "UserAccount": {
+      "title": "UserAccount",
+      "description": "Authenticated adult user account with fixed role and school association.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "role": { "type": "string", "enum": ["school_admin", "safety_officer", "teacher", "parent"] },
+        "schoolId": { "type": "string", "maxLength": 128 },
+        "isHomeOnly": { "type": "boolean" },
+        "homeSafetyConfirmed": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "role", "schoolId", "isHomeOnly", "homeSafetyConfirmed", "createdAt", "updatedAt"]
+    },
+    "School": {
+      "title": "School",
+      "description": "School settings, pre-use checklist, retention period, supervisor metadata, and safety escalation policy.",
+      "type": "object",
+      "properties": {
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "adminUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolCodeLabel": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "academicYear": { "type": "string", "minLength": 1, "maxLength": 16 },
+        "retentionMonths": { "type": "integer" },
+        "checkBoardApproved": { "type": "boolean" },
+        "checkParentConsent": { "type": "boolean" },
+        "checkChildExplain": { "type": "boolean" },
+        "checkSpecialistDocs": { "type": "boolean" },
+        "checkSafetyWorkflow": { "type": "boolean" },
+        "allPreChecksDone": { "type": "boolean" },
+        "directorySupervisor": { "type": "string", "maxLength": 120 },
+        "directoryVersion": { "type": "string", "maxLength": 32 },
+        "safetySupervisor": { "type": "string", "maxLength": 120 },
+        "safetyVersion": { "type": "string", "maxLength": 32 },
+        "primaryOfficerLabel": { "type": "string", "maxLength": 80 },
+        "deputyOfficerLabel": { "type": "string", "maxLength": 80 },
+        "managerOfficerLabel": { "type": "string", "maxLength": 80 },
+        "escalateToDeputyMinutes": { "type": "integer" },
+        "escalateToManagerMinutes": { "type": "integer" },
+        "offHoursRule": { "type": "string", "maxLength": 500 },
+        "invitesIssuedCount": { "type": "integer" },
+        "linkedHouseholdsCount": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "schoolId",
+        "adminUid",
+        "schoolCodeLabel",
+        "academicYear",
+        "retentionMonths",
+        "checkBoardApproved",
+        "checkParentConsent",
+        "checkChildExplain",
+        "checkSpecialistDocs",
+        "checkSafetyWorkflow",
+        "allPreChecksDone",
+        "directorySupervisor",
+        "directoryVersion",
+        "safetySupervisor",
+        "safetyVersion",
+        "primaryOfficerLabel",
+        "deputyOfficerLabel",
+        "managerOfficerLabel",
+        "escalateToDeputyMinutes",
+        "escalateToManagerMinutes",
+        "offHoursRule",
+        "invitesIssuedCount",
+        "linkedHouseholdsCount",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SchoolClass": {
+      "title": "SchoolClass",
+      "description": "Class metadata, assigned homeroom teacher, and student IDs.",
+      "type": "object",
+      "properties": {
+        "classId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "adminUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "className": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "grade": { "type": "integer" },
+        "gradeBand": { "type": "string", "enum": ["low", "middle", "high"] },
+        "academicYear": { "type": "string", "minLength": 1, "maxLength": 16 },
+        "teacherUid": { "type": "string", "maxLength": 128 },
+        "studentIds": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["classId", "schoolId", "adminUid", "className", "grade", "gradeBand", "academicYear", "teacherUid", "studentIds", "createdAt", "updatedAt"]
+    },
+    "StaffMembership": {
+      "title": "StaffMembership",
+      "description": "Teacher or safety officer assignment within a school.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "adminUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "staffRole": { "type": "string", "enum": ["teacher", "safety_officer"] },
+        "classId": { "type": "string", "maxLength": 128 },
+        "safetyTier": { "type": "string", "enum": ["none", "primary", "deputy", "manager"] },
+        "displayLabel": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "redeemedInviteCode": { "type": "string", "minLength": 10, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "schoolId", "adminUid", "staffRole", "classId", "safetyTier", "displayLabel", "redeemedInviteCode", "active", "createdAt", "updatedAt"]
+    },
+    "StaffInvite": {
+      "title": "StaffInvite",
+      "description": "Expiring invitation code for teachers and safety officers without personal names.",
+      "type": "object",
+      "properties": {
+        "inviteCode": { "type": "string", "minLength": 10, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "adminUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "targetRole": { "type": "string", "enum": ["teacher", "safety_officer"] },
+        "classId": { "type": "string", "maxLength": 128 },
+        "safetyTier": { "type": "string", "enum": ["none", "primary", "deputy", "manager"] },
+        "roleTitleLabel": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "status": { "type": "string", "enum": ["active", "used", "revoked"] },
+        "usedByUid": { "type": "string", "maxLength": 128 },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["inviteCode", "schoolId", "adminUid", "targetRole", "classId", "safetyTier", "roleTitleLabel", "status", "usedByUid", "expiresAt", "createdAt", "updatedAt"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Minimal child profile containing only random ID, nickname, grade, and class.",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128 },
+        "adminUid": { "type": "string", "maxLength": 128 },
+        "classId": { "type": "string", "maxLength": 128 },
+        "attendanceNumber": { "type": "integer" },
+        "parentUid": { "type": "string", "maxLength": 128 },
+        "nickname": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "grade": { "type": "integer" },
+        "gradeBand": { "type": "string", "enum": ["low", "middle", "high"] },
+        "isHomeOnly": { "type": "boolean" },
+        "participationOptOut": { "type": "boolean", "description": "When true, child plays identical classroom content with zero behavioral or answer data recorded." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["studentId", "schoolId", "adminUid", "classId", "parentUid", "attendanceNumber", "nickname", "grade", "gradeBand", "isHomeOnly", "createdAt", "updatedAt"]
+    },
+    "StudentRecordIndex": {
+      "title": "StudentRecordIndex",
+      "description": "Content-free index of record IDs partitioned by visibility for a single student.",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128 },
+        "classId": { "type": "string", "maxLength": 128 },
+        "gameSessionIds": { "type": "array" },
+        "childAnswerBothIds": { "type": "array" },
+        "childAnswerTeacherIds": { "type": "array" },
+        "childAnswerParentIds": { "type": "array" },
+        "schoolObsOwnIds": { "type": "array" },
+        "homeObsOwnIds": { "type": "array" },
+        "sharedObsIds": { "type": "array" },
+        "gameChildObsBothIds": { "type": "array" },
+        "childObsTeacherIds": { "type": "array" },
+        "childObsParentIds": { "type": "array" },
+        "sharingRequestIds": { "type": "array" },
+        "schoolHypIds": { "type": "array" },
+        "homeHypIds": { "type": "array" },
+        "sharedHypIds": { "type": "array" },
+        "schoolTrialIds": { "type": "array" },
+        "homeTrialIds": { "type": "array" },
+        "sharedTrialIds": { "type": "array" },
+        "consultationIds": { "type": "array" },
+        "nextFormalSeq": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "studentId",
+        "schoolId",
+        "classId",
+        "gameSessionIds",
+        "childAnswerBothIds",
+        "childAnswerTeacherIds",
+        "childAnswerParentIds",
+        "schoolObsOwnIds",
+        "homeObsOwnIds",
+        "sharedObsIds",
+        "gameChildObsBothIds",
+        "childObsTeacherIds",
+        "childObsParentIds",
+        "sharingRequestIds",
+        "schoolHypIds",
+        "homeHypIds",
+        "sharedHypIds",
+        "schoolTrialIds",
+        "homeTrialIds",
+        "sharedTrialIds",
+        "consultationIds",
+        "nextFormalSeq",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "StudentInvite": {
+      "title": "StudentInvite",
+      "description": "Expiring invitation code for linking a parent account to a student profile.",
+      "type": "object",
+      "properties": {
+        "inviteCode": { "type": "string", "minLength": 10, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "classId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "adminUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "grade": { "type": "integer" },
+        "status": { "type": "string", "enum": ["active", "pending_approval", "approved", "revoked"] },
+        "requestedByParentUid": { "type": "string", "maxLength": 128 },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["inviteCode", "studentId", "schoolId", "classId", "adminUid", "grade", "status", "requestedByParentUid", "expiresAt", "createdAt", "updatedAt"]
+    },
+    "ParentLinkRequest": {
+      "title": "ParentLinkRequest",
+      "description": "Parent link approval request reviewed by school administrator.",
+      "type": "object",
+      "properties": {
+        "requestId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "inviteCode": { "type": "string", "minLength": 10, "maxLength": 64 },
+        "studentId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "classId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "adminUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "parentUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "status": { "type": "string", "enum": ["pending", "approved", "declined"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["requestId", "inviteCode", "studentId", "schoolId", "classId", "adminUid", "parentUid", "status", "createdAt", "updatedAt"]
+    },
+    "GameSession": {
+      "title": "GameSession",
+      "description": "Mini-game behavioral session stored by studentId separately from nicknames.",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128 },
+        "classId": { "type": "string", "maxLength": 128 },
+        "gameType": { "type": "string", "enum": ["shopping", "delivery"] },
+        "attemptNumber": { "type": "integer" },
+        "version": { "type": "string", "maxLength": 32 },
+        "form": { "type": "string", "enum": ["A", "B"] },
+        "orderPattern": { "type": "string", "enum": ["illust_first", "text_first", "fixed"] },
+        "grade": { "type": "integer" },
+        "gradeBand": { "type": "string", "enum": ["low", "middle", "high"] },
+        "place": { "type": "string", "enum": ["school", "home"] },
+        "deviceType": { "type": "string", "enum": ["tablet", "smartphone", "pc"] },
+        "usedTts": { "type": "boolean" },
+        "paused": { "type": "boolean" },
+        "items": { "type": "array" },
+        "factSentence": { "type": "string", "maxLength": 1000 },
+        "conditionSummary": { "type": "string", "maxLength": 1000 },
+        "dateLabel": { "type": "string", "maxLength": 32 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "sessionId",
+        "studentId",
+        "schoolId",
+        "classId",
+        "gameType",
+        "attemptNumber",
+        "version",
+        "form",
+        "orderPattern",
+        "grade",
+        "gradeBand",
+        "place",
+        "deviceType",
+        "usedTts",
+        "paused",
+        "items",
+        "factSentence",
+        "conditionSummary",
+        "dateLabel",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ChildAnswer": {
+      "title": "ChildAnswer",
+      "description": "Non-safety child answer from adventure talk with child-chosen recipient visibility.",
+      "type": "object",
+      "properties": {
+        "answerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128 },
+        "classId": { "type": "string", "maxLength": 128 },
+        "questionType": { "type": "string", "enum": ["base", "interlude", "talk_trouble"] },
+        "questionId": { "type": "string", "maxLength": 64 },
+        "questionText": { "type": "string", "maxLength": 500 },
+        "choices": { "type": "array" },
+        "freeText": { "type": "string", "maxLength": 1000 },
+        "followupTranscript": { "type": "string", "maxLength": 2500 },
+        "visibility": { "type": "string", "enum": ["teacher", "parent", "both", "none"] },
+        "isDistressSignal": { "type": "boolean" },
+        "factSentence": { "type": "string", "maxLength": 1000 },
+        "dateLabel": { "type": "string", "maxLength": 32 },
+        "place": { "type": "string", "enum": ["school", "home"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "answerId",
+        "studentId",
+        "schoolId",
+        "classId",
+        "questionType",
+        "questionId",
+        "questionText",
+        "choices",
+        "freeText",
+        "followupTranscript",
+        "visibility",
+        "isDistressSignal",
+        "factSentence",
+        "dateLabel",
+        "place",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Observation": {
+      "title": "Observation",
+      "description": "Append-only factual observation separated by source side (game, child, school, home).",
+      "type": "object",
+      "properties": {
+        "observationId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "formalId": { "type": "string", "maxLength": 32 },
+        "studentId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128 },
+        "classId": { "type": "string", "maxLength": 128 },
+        "side": { "type": "string", "enum": ["game", "child", "school", "home"] },
+        "category": { "type": "string", "enum": ["strength", "worked_well", "hard", "child_said", "other"] },
+        "fact": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "shareStatus": { "type": "string", "enum": ["not_shared", "shared", "stopped"] },
+        "visibleTo": { "type": "string", "enum": ["both", "teacher", "parent", "none"] },
+        "pendingRequestId": { "type": "string", "maxLength": 128 },
+        "correctsObservationId": { "type": "string", "maxLength": 128 },
+        "dateLabel": { "type": "string", "maxLength": 32 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "observationId",
+        "formalId",
+        "studentId",
+        "schoolId",
+        "classId",
+        "side",
+        "category",
+        "fact",
+        "shareStatus",
+        "visibleTo",
+        "pendingRequestId",
+        "correctsObservationId",
+        "dateLabel",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SharingRequest": {
+      "title": "SharingRequest",
+      "description": "Consent-gated sharing request with sender-approved preview.",
+      "type": "object",
+      "properties": {
+        "requestId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "observationId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128 },
+        "classId": { "type": "string", "maxLength": 128 },
+        "fromSide": { "type": "string", "enum": ["school", "home"] },
+        "toSide": { "type": "string", "enum": ["school", "home"] },
+        "category": { "type": "string", "enum": ["strength", "worked_well", "hard", "child_said", "other"] },
+        "previewText": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "purposeText": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "status": { "type": "string", "enum": ["pending", "approved", "declined", "withdrawn"] },
+        "replyChoice": { "type": "string", "maxLength": 80 },
+        "replySupplement": { "type": "string", "maxLength": 1500 },
+        "dateLabel": { "type": "string", "maxLength": 32 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "requestId",
+        "observationId",
+        "studentId",
+        "schoolId",
+        "classId",
+        "fromSide",
+        "toSide",
+        "category",
+        "previewText",
+        "purposeText",
+        "status",
+        "replyChoice",
+        "replySupplement",
+        "dateLabel",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Hypothesis": {
+      "title": "Hypothesis",
+      "description": "Evidence-backed hypothesis linking formal observation IDs.",
+      "type": "object",
+      "properties": {
+        "hypothesisId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "formalId": { "type": "string", "maxLength": 32 },
+        "studentId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128 },
+        "classId": { "type": "string", "maxLength": 128 },
+        "createdBySide": { "type": "string", "enum": ["school", "home"] },
+        "shareStatus": { "type": "string", "enum": ["not_shared", "shared", "stopped"] },
+        "text": { "type": "string", "minLength": 1, "maxLength": 1500 },
+        "why": { "type": "string", "minLength": 1, "maxLength": 1500 },
+        "evidenceIds": { "type": "array" },
+        "evidenceSides": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "hypothesisId",
+        "formalId",
+        "studentId",
+        "schoolId",
+        "classId",
+        "createdBySide",
+        "shareStatus",
+        "text",
+        "why",
+        "evidenceIds",
+        "evidenceSides",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Trial": {
+      "title": "Trial",
+      "description": "Actionable support trial storing adult evaluation and child feedback side-by-side.",
+      "type": "object",
+      "properties": {
+        "trialId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "formalId": { "type": "string", "maxLength": 32 },
+        "studentId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128 },
+        "classId": { "type": "string", "maxLength": 128 },
+        "where": { "type": "string", "enum": ["school", "home"] },
+        "shareStatus": { "type": "string", "enum": ["not_shared", "shared", "stopped"] },
+        "whatToChange": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "why": { "type": "string", "maxLength": 1000 },
+        "basedOnIds": { "type": "array" },
+        "adjustsTrialId": { "type": "string", "maxLength": 128 },
+        "adultResult": { "type": "string", "enum": ["unrecorded", "helpful", "depends", "not_fit"] },
+        "childBurden": { "type": "string", "enum": ["unrecorded", "easier", "same", "harder"] },
+        "continuedStatus": { "type": "string", "enum": ["unrecorded", "continued", "stopped", "sometimes"] },
+        "childFeedback": { "type": "string", "enum": ["unrecorded", "good", "normal", "disliked"] },
+        "childFeedbackNote": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "trialId",
+        "formalId",
+        "studentId",
+        "schoolId",
+        "classId",
+        "where",
+        "shareStatus",
+        "whatToChange",
+        "why",
+        "basedOnIds",
+        "adjustsTrialId",
+        "adultResult",
+        "childBurden",
+        "continuedStatus",
+        "childFeedback",
+        "childFeedbackNote",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Consultation": {
+      "title": "Consultation",
+      "description": "Parent-to-teacher consultation message with selected shared records.",
+      "type": "object",
+      "properties": {
+        "consultationId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128 },
+        "classId": { "type": "string", "maxLength": 128 },
+        "selectedRecordSummaries": { "type": "array" },
+        "messageBody": { "type": "string", "minLength": 1, "maxLength": 3000 },
+        "teacherReply": { "type": "string", "maxLength": 3000 },
+        "status": { "type": "string", "enum": ["sent", "replied"] },
+        "dateLabel": { "type": "string", "maxLength": 32 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "consultationId",
+        "studentId",
+        "schoolId",
+        "classId",
+        "selectedRecordSummaries",
+        "messageBody",
+        "teacherReply",
+        "status",
+        "dateLabel",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SchoolSafetyQueue": {
+      "title": "SchoolSafetyQueue",
+      "description": "Content-free queue of safety report IDs and homeroom notice IDs for a school.",
+      "type": "object",
+      "properties": {
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "reportIds": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["schoolId", "reportIds", "createdAt", "updatedAt"]
+    },
+    "SafetyReport": {
+      "title": "SafetyReport",
+      "description": "Strictly isolated child safety appeal readable ONLY by appointed school safety officers.",
+      "type": "object",
+      "properties": {
+        "reportId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "classId": { "type": "string", "maxLength": 128 },
+        "studentId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentNickname": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "place": { "type": "string", "enum": ["school", "home"] },
+        "triggerSource": { "type": "string", "enum": ["talk_button_scary", "keyword_detected", "gemini_safety_review"] },
+        "childWords": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "createdAtMs": { "type": "integer" },
+        "primaryDeadlineMs": { "type": "integer" },
+        "deputyDeadlineMs": { "type": "integer" },
+        "status": { "type": "string", "enum": ["unconfirmed", "opened", "responded"] },
+        "hasOpened": { "type": "boolean" },
+        "openedAtMs": { "type": "integer" },
+        "confirmedByUid": { "type": "string", "maxLength": 128 },
+        "confirmedByLabel": { "type": "string", "maxLength": 80 },
+        "actionsTaken": { "type": "array" },
+        "actionNote": { "type": "string", "maxLength": 2000 },
+        "hasActed": { "type": "boolean" },
+        "actedAtMs": { "type": "integer" },
+        "teacherNoticeId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "reportId",
+        "schoolId",
+        "classId",
+        "studentId",
+        "studentNickname",
+        "place",
+        "triggerSource",
+        "childWords",
+        "createdAtMs",
+        "primaryDeadlineMs",
+        "deputyDeadlineMs",
+        "status",
+        "hasOpened",
+        "openedAtMs",
+        "confirmedByUid",
+        "confirmedByLabel",
+        "actionsTaken",
+        "actionNote",
+        "hasActed",
+        "actedAtMs",
+        "teacherNoticeId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "TeacherSafetyNotice": {
+      "title": "TeacherSafetyNotice",
+      "description": "Content-free notification letting homeroom teacher know safety officer is reviewing a record.",
+      "type": "object",
+      "properties": {
+        "noticeId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "classId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "status": { "type": "string", "enum": ["checking", "resolved"] },
+        "officerSharedNote": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["noticeId", "schoolId", "classId", "status", "officerSharedNote", "createdAt", "updatedAt"]
+    },
+    "ParentFollowup": {
+      "title": "ParentFollowup",
+      "description": "Private optional parent follow-up status without diagnosis fields.",
+      "type": "object",
+      "properties": {
+        "followupId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "parentUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "currentSituation": {
+          "type": "string",
+          "enum": ["consulted_teacher", "consulted_specialist", "planning_to_consult", "trying_at_school", "thinking"]
+        },
+        "memoHelpful": { "type": "string", "enum": ["none", "helpful", "somewhat", "not_used"] },
+        "consentForImprovement": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["followupId", "parentUid", "studentId", "currentSituation", "memoHelpful", "consentForImprovement", "createdAt", "updatedAt"]
+    },
+    "AccessLog": {
+      "title": "AccessLog",
+      "description": "Immutable access log recording who viewed records and when, without record contents.",
+      "type": "object",
+      "properties": {
+        "logId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128 },
+        "adminUid": { "type": "string", "maxLength": 128 },
+        "actorUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "actorRole": { "type": "string", "enum": ["school_admin", "safety_officer", "teacher", "parent"] },
+        "actionLabel": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "studentIdRef": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["logId", "schoolId", "adminUid", "actorUid", "actorRole", "actionLabel", "studentIdRef", "createdAt"]
+    },
+    "ClassroomSession": {
+      "title": "ClassroomSession",
+      "description": "Teacher-controlled live classroom play window showing connected student count only.",
+      "type": "object",
+      "properties": {
+        "classId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "adminUid": { "type": "string", "maxLength": 128 },
+        "teacherUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "className": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "classJoinCode": { "type": "string", "minLength": 6, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "isOpen": { "type": "boolean" },
+        "allowTakeHome": { "type": "boolean" },
+        "connectedCount": { "type": "integer" },
+        "openedAt": { "type": "string", "format": "date-time" },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["classId", "schoolId", "adminUid", "teacherUid", "className", "classJoinCode", "isOpen", "allowTakeHome", "connectedCount", "openedAt", "expiresAt", "createdAt", "updatedAt"]
+    },
+    "ClassroomJoinCode": {
+      "title": "ClassroomJoinCode",
+      "description": "Lookup index mapping short classroom join code to classId.",
+      "type": "object",
+      "properties": {
+        "classJoinCode": { "type": "string", "minLength": 6, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "classId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "teacherUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["classJoinCode", "classId", "schoolId", "teacherUid", "createdAt", "updatedAt"]
+    },
+    "ClassroomRoster": {
+      "title": "ClassroomRoster",
+      "description": "Attendance-number-only mapping for 1-per-student device binding without student names.",
+      "type": "object",
+      "properties": {
+        "classId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "teacherUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "entries": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["classId", "schoolId", "teacherUid", "entries", "createdAt", "updatedAt"]
+    },
+    "SchoolPseudoBinding": {
+      "title": "SchoolPseudoBinding",
+      "description": "Irreversible SHA-256 pseudonymous binding for school Google accounts without storing raw UID or email.",
+      "type": "object",
+      "properties": {
+        "pseudoHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "classId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "attendanceNumber": { "type": "integer" },
+        "grade": { "type": "integer" },
+        "gradeBand": { "type": "string", "enum": ["low", "middle", "high"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["pseudoHash", "schoolId", "classId", "studentId", "attendanceNumber", "grade", "gradeBand", "createdAt", "updatedAt"]
+    },
+    "StudentQrCard": {
+      "title": "StudentQrCard",
+      "description": "Hashed nameless QR card credential for schools without student Google accounts.",
+      "type": "object",
+      "properties": {
+        "qrTokenHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "cardCodeHint": { "type": "string", "maxLength": 12 },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "adminUid": { "type": "string", "maxLength": 128 },
+        "teacherUid": { "type": "string", "maxLength": 128 },
+        "classId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "className": { "type": "string", "maxLength": 60 },
+        "studentId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "attendanceNumber": { "type": "integer" },
+        "grade": { "type": "integer" },
+        "gradeBand": { "type": "string", "enum": ["low", "middle", "high"] },
+        "participationOptOut": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["active", "revoked"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["qrTokenHash", "cardCodeHint", "schoolId", "adminUid", "teacherUid", "classId", "className", "studentId", "attendanceNumber", "grade", "gradeBand", "participationOptOut", "status", "createdAt", "updatedAt"]
+    },
+    "StudentPlayTicket": {
+      "title": "StudentPlayTicket",
+      "description": "Short-lived capability ticket for 1-per-student device sessions without raw account identifiers.",
+      "type": "object",
+      "properties": {
+        "ticketId": { "type": "string", "minLength": 16, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "classId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "mode": { "type": "string", "enum": ["classroom", "take_home"] },
+        "authProofHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "authMethod": { "type": "string", "enum": ["pseudo", "qr"] },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ticketId", "studentId", "schoolId", "classId", "mode", "authProofHash", "authMethod", "expiresAt", "createdAt"]
+    },
+    "StudentReward": {
+      "title": "StudentReward",
+      "description": "Adventure coins and unlocked 3D gachapon collection items for opted-in students.",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "maxLength": 128 },
+        "classId": { "type": "string", "maxLength": 128 },
+        "coins": { "type": "integer" },
+        "totalSpins": { "type": "integer" },
+        "unlockedItemIds": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["studentId", "schoolId", "classId", "coins", "totalSpins", "unlockedItemIds", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserAccount" },
+      "description": "Adult user account profiles with role and school linkage."
+    },
+    "/schools/{schoolId}": {
+      "schema": { "$ref": "#/entities/School" },
+      "description": "School settings, pre-checks, and safety escalation configuration."
+    },
+    "/classes/{classId}": {
+      "schema": { "$ref": "#/entities/SchoolClass" },
+      "description": "Classes within a school."
+    },
+    "/staff_memberships/{userId}": {
+      "schema": { "$ref": "#/entities/StaffMembership" },
+      "description": "Staff membership records for teachers and safety officers."
+    },
+    "/staff_invites/{inviteCode}": {
+      "schema": { "$ref": "#/entities/StaffInvite" },
+      "description": "Expiring invitation codes for teachers and safety officers."
+    },
+    "/students/{studentId}": {
+      "schema": { "$ref": "#/entities/Student" },
+      "description": "Minimal child profiles (nickname, grade, class, and optional opt-out flag)."
+    },
+    "/student_record_indexes/{studentId}": {
+      "schema": { "$ref": "#/entities/StudentRecordIndex" },
+      "description": "Content-free record ID index partitioned by visibility."
+    },
+    "/student_invites/{inviteCode}": {
+      "schema": { "$ref": "#/entities/StudentInvite" },
+      "description": "Expiring parent invitation codes for linking with students."
+    },
+    "/parent_link_requests/{requestId}": {
+      "schema": { "$ref": "#/entities/ParentLinkRequest" },
+      "description": "Parent link requests awaiting school approval."
+    },
+    "/game_sessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/GameSession" },
+      "description": "Game behavioral sessions stored by studentId without nicknames or account IDs."
+    },
+    "/child_answers/{answerId}": {
+      "schema": { "$ref": "#/entities/ChildAnswer" },
+      "description": "Child dialogue responses gated by child-selected visibility."
+    },
+    "/observations/{observationId}": {
+      "schema": { "$ref": "#/entities/Observation" },
+      "description": "Append-only observations separated by side and gated by shareStatus."
+    },
+    "/sharing_requests/{requestId}": {
+      "schema": { "$ref": "#/entities/SharingRequest" },
+      "description": "Sharing consent requests showing approved preview only."
+    },
+    "/hypotheses/{hypothesisId}": {
+      "schema": { "$ref": "#/entities/Hypothesis" },
+      "description": "Evidence-linked support hypotheses."
+    },
+    "/trials/{trialId}": {
+      "schema": { "$ref": "#/entities/Trial" },
+      "description": "Support trials with separate adult evaluation and child feedback."
+    },
+    "/consultations/{consultationId}": {
+      "schema": { "$ref": "#/entities/Consultation" },
+      "description": "Parent-to-teacher consultations."
+    },
+    "/school_safety_queues/{schoolId}": {
+      "schema": { "$ref": "#/entities/SchoolSafetyQueue" },
+      "description": "Content-free queue of safety report IDs for school safety officers."
+    },
+    "/safety_reports/{reportId}": {
+      "schema": { "$ref": "#/entities/SafetyReport" },
+      "description": "Isolated child safety reports accessible exclusively by safety officers."
+    },
+    "/teacher_safety_notices/{noticeId}": {
+      "schema": { "$ref": "#/entities/TeacherSafetyNotice" },
+      "description": "Content-free safety check status notices for homeroom teachers."
+    },
+    "/parent_followups/{followupId}": {
+      "schema": { "$ref": "#/entities/ParentFollowup" },
+      "description": "Private parent follow-up status logs."
+    },
+    "/access_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AccessLog" },
+      "description": "Audit logs of record access without record contents."
+    },
+    "/classroom_sessions/{classId}": {
+      "schema": { "$ref": "#/entities/ClassroomSession" },
+      "description": "Live classroom play window controlled by homeroom teacher."
+    },
+    "/classroom_join_codes/{classJoinCode}": {
+      "schema": { "$ref": "#/entities/ClassroomJoinCode" },
+      "description": "Short classroom join code lookup index."
+    },
+    "/classroom_rosters/{classId}": {
+      "schema": { "$ref": "#/entities/ClassroomRoster" },
+      "description": "Attendance-number-only mapping for classroom device binding."
+    },
+    "/school_pseudo_bindings/{pseudoHash}": {
+      "schema": { "$ref": "#/entities/SchoolPseudoBinding" },
+      "description": "Irreversible SHA-256 pseudonymous binding for school Google accounts."
+    },
+    "/student_qr_cards/{qrTokenHash}": {
+      "schema": { "$ref": "#/entities/StudentQrCard" },
+      "description": "Hashed nameless QR card credentials for non-Google-account schools."
+    },
+    "/student_play_tickets/{ticketId}": {
+      "schema": { "$ref": "#/entities/StudentPlayTicket" },
+      "description": "Ephemeral capability tickets for 1-per-student tablet sessions."
+    },
+    "/student_rewards/{studentId}": {
+      "schema": { "$ref": "#/entities/StudentReward" },
+      "description": "Adventure coins and unlocked 3D gachapon items for opted-in students."
+    }
+  }
+}

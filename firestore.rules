@@ -1,0 +1,1855 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 4.1: Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // Global Hardened Primitives
+    // =========================================================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isOptionalId(id) {
+      return id is string && id.size() <= 128 && (id.size() == 0 || id.matches('^[a-zA-Z0-9_\\-]+$'));
+    }
+
+    function isStringList(arr, maxItems) {
+      return arr is list && arr.size() <= maxItems && (arr.size() == 0 || (arr[0] is string && arr[0].size() <= 500));
+    }
+
+    function isMapList(arr, maxItems) {
+      return arr is list && arr.size() <= maxItems && (arr.size() == 0 || arr[0] is map);
+    }
+
+    // =========================================================================
+    // Relational Master Gates (Never called in allow list)
+    // =========================================================================
+    function isSchoolAdmin(schoolId) {
+      return schoolId is string
+        && schoolId.size() > 0
+        && schoolId.size() <= 128
+        && exists(/databases/$(database)/documents/schools/$(schoolId))
+        && get(/databases/$(database)/documents/schools/$(schoolId)).data.adminUid == request.auth.uid;
+    }
+
+    function isSchoolAdminOrAfter(schoolId) {
+      return isSchoolAdmin(schoolId)
+        || (schoolId is string
+            && schoolId.size() > 0
+            && schoolId.size() <= 128
+            && existsAfter(/databases/$(database)/documents/schools/$(schoolId))
+            && getAfter(/databases/$(database)/documents/schools/$(schoolId)).data.adminUid == request.auth.uid);
+    }
+
+    function isSchoolPreChecked(schoolId) {
+      return schoolId is string
+        && schoolId.size() > 0
+        && exists(/databases/$(database)/documents/schools/$(schoolId))
+        && get(/databases/$(database)/documents/schools/$(schoolId)).data.allPreChecksDone == true;
+    }
+
+    function isActiveTeacherOfClass(classId) {
+      return classId is string
+        && classId.size() > 0
+        && classId.size() <= 128
+        && exists(/databases/$(database)/documents/staff_memberships/$(request.auth.uid))
+        && get(/databases/$(database)/documents/staff_memberships/$(request.auth.uid)).data.active == true
+        && get(/databases/$(database)/documents/staff_memberships/$(request.auth.uid)).data.staffRole == 'teacher'
+        && get(/databases/$(database)/documents/staff_memberships/$(request.auth.uid)).data.classId == classId;
+    }
+
+    function isActiveSafetyOfficerOfSchool(schoolId) {
+      return schoolId is string
+        && schoolId.size() > 0
+        && schoolId.size() <= 128
+        && exists(/databases/$(database)/documents/staff_memberships/$(request.auth.uid))
+        && get(/databases/$(database)/documents/staff_memberships/$(request.auth.uid)).data.active == true
+        && get(/databases/$(database)/documents/staff_memberships/$(request.auth.uid)).data.staffRole == 'safety_officer'
+        && get(/databases/$(database)/documents/staff_memberships/$(request.auth.uid)).data.schoolId == schoolId;
+    }
+
+    function isApprovedParentOfStudent(studentId) {
+      return studentId is string
+        && studentId.size() > 0
+        && studentId.size() <= 128
+        && exists(/databases/$(database)/documents/students/$(studentId))
+        && get(/databases/$(database)/documents/students/$(studentId)).data.parentUid == request.auth.uid;
+    }
+
+    function isApprovedParentOfStudentOrAfter(studentId) {
+      return isApprovedParentOfStudent(studentId)
+        || (studentId is string
+            && studentId.size() > 0
+            && studentId.size() <= 128
+            && existsAfter(/databases/$(database)/documents/students/$(studentId))
+            && getAfter(/databases/$(database)/documents/students/$(studentId)).data.parentUid == request.auth.uid);
+    }
+
+    function isMemberOfSchool(schoolId) {
+      return isSchoolAdmin(schoolId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.schoolId == schoolId);
+    }
+
+    function isHex64(val) {
+      return val is string && val.size() == 64 && val.matches('^[a-f0-9]{64}$');
+    }
+
+    function isStudentNotOptedOut(studentId) {
+      return studentId is string
+        && studentId.size() > 0
+        && studentId.size() <= 128
+        && exists(/databases/$(database)/documents/students/$(studentId))
+        && (!('participationOptOut' in get(/databases/$(database)/documents/students/$(studentId)).data)
+            || get(/databases/$(database)/documents/students/$(studentId)).data.participationOptOut == false);
+    }
+
+    function isClassroomWindowOpen(classId) {
+      return classId is string
+        && classId.size() > 0
+        && classId.size() <= 128
+        && exists(/databases/$(database)/documents/classroom_sessions/$(classId))
+        && get(/databases/$(database)/documents/classroom_sessions/$(classId)).data.isOpen == true
+        && get(/databases/$(database)/documents/classroom_sessions/$(classId)).data.expiresAt > request.time;
+    }
+
+    function isTakeHomeAllowed(classId) {
+      return classId is string
+        && classId.size() > 0
+        && classId.size() <= 128
+        && exists(/databases/$(database)/documents/classroom_sessions/$(classId))
+        && get(/databases/$(database)/documents/classroom_sessions/$(classId)).data.allowTakeHome == true;
+    }
+
+    function hasValidPlayTicket(ticketId, studentId, schoolId, classId, place) {
+      return ticketId is string
+        && ticketId.size() >= 16
+        && ticketId.size() <= 64
+        && exists(/databases/$(database)/documents/student_play_tickets/$(ticketId))
+        && get(/databases/$(database)/documents/student_play_tickets/$(ticketId)).data.studentId == studentId
+        && get(/databases/$(database)/documents/student_play_tickets/$(ticketId)).data.schoolId == schoolId
+        && get(/databases/$(database)/documents/student_play_tickets/$(ticketId)).data.classId == classId
+        && get(/databases/$(database)/documents/student_play_tickets/$(ticketId)).data.expiresAt > request.time
+        && (
+          (place == 'school'
+            && get(/databases/$(database)/documents/student_play_tickets/$(ticketId)).data.mode == 'classroom'
+            && isClassroomWindowOpen(classId))
+          ||
+          (place == 'home'
+            && get(/databases/$(database)/documents/student_play_tickets/$(ticketId)).data.mode == 'take_home'
+            && isTakeHomeAllowed(classId))
+        );
+    }
+
+    function hasValidAnyPlaceTicket(ticketId, studentId, schoolId, classId) {
+      return hasValidPlayTicket(ticketId, studentId, schoolId, classId, 'school')
+        || hasValidPlayTicket(ticketId, studentId, schoolId, classId, 'home');
+    }
+
+    // =========================================================================
+    // Validation Blueprints (Pillar 2: Strict Keys, Types, Bounds)
+    // =========================================================================
+    function isValidUserAccount(data) {
+      return data.keys().hasAll(['uid', 'role', 'schoolId', 'isHomeOnly', 'homeSafetyConfirmed', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'role', 'schoolId', 'isHomeOnly', 'homeSafetyConfirmed', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.uid == request.auth.uid
+        && data.role in ['school_admin', 'safety_officer', 'teacher', 'parent']
+        && isOptionalId(data.schoolId)
+        && data.isHomeOnly is bool
+        && data.homeSafetyConfirmed is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSchool(data) {
+      return data.keys().hasAll([
+          'schoolId', 'adminUid', 'schoolCodeLabel', 'academicYear', 'retentionMonths',
+          'checkBoardApproved', 'checkParentConsent', 'checkChildExplain', 'checkSpecialistDocs', 'checkSafetyWorkflow',
+          'allPreChecksDone', 'directorySupervisor', 'directoryVersion', 'safetySupervisor', 'safetyVersion',
+          'primaryOfficerLabel', 'deputyOfficerLabel', 'managerOfficerLabel',
+          'escalateToDeputyMinutes', 'escalateToManagerMinutes', 'offHoursRule',
+          'invitesIssuedCount', 'linkedHouseholdsCount', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'schoolId', 'adminUid', 'schoolCodeLabel', 'academicYear', 'retentionMonths',
+          'checkBoardApproved', 'checkParentConsent', 'checkChildExplain', 'checkSpecialistDocs', 'checkSafetyWorkflow',
+          'allPreChecksDone', 'directorySupervisor', 'directoryVersion', 'safetySupervisor', 'safetyVersion',
+          'primaryOfficerLabel', 'deputyOfficerLabel', 'managerOfficerLabel',
+          'escalateToDeputyMinutes', 'escalateToManagerMinutes', 'offHoursRule',
+          'invitesIssuedCount', 'linkedHouseholdsCount', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.schoolId)
+        && isValidId(data.adminUid)
+        && data.schoolCodeLabel is string && data.schoolCodeLabel.size() >= 1 && data.schoolCodeLabel.size() <= 100
+        && data.academicYear is string && data.academicYear.size() >= 1 && data.academicYear.size() <= 16
+        && data.retentionMonths is int && data.retentionMonths >= 1 && data.retentionMonths <= 120
+        && data.checkBoardApproved is bool
+        && data.checkParentConsent is bool
+        && data.checkChildExplain is bool
+        && data.checkSpecialistDocs is bool
+        && data.checkSafetyWorkflow is bool
+        && data.allPreChecksDone is bool
+        && data.allPreChecksDone == (data.checkBoardApproved && data.checkParentConsent && data.checkChildExplain && data.checkSpecialistDocs && data.checkSafetyWorkflow)
+        && data.directorySupervisor is string && data.directorySupervisor.size() <= 120
+        && data.directoryVersion is string && data.directoryVersion.size() <= 32
+        && data.safetySupervisor is string && data.safetySupervisor.size() <= 120
+        && data.safetyVersion is string && data.safetyVersion.size() <= 32
+        && data.primaryOfficerLabel is string && data.primaryOfficerLabel.size() <= 80
+        && data.deputyOfficerLabel is string && data.deputyOfficerLabel.size() <= 80
+        && data.managerOfficerLabel is string && data.managerOfficerLabel.size() <= 80
+        && data.escalateToDeputyMinutes is int && data.escalateToDeputyMinutes >= 1 && data.escalateToDeputyMinutes <= 1440
+        && data.escalateToManagerMinutes is int && data.escalateToManagerMinutes >= 1 && data.escalateToManagerMinutes <= 2880
+        && data.offHoursRule is string && data.offHoursRule.size() <= 500
+        && data.invitesIssuedCount is int && data.invitesIssuedCount >= 0
+        && data.linkedHouseholdsCount is int && data.linkedHouseholdsCount >= 0
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSchoolClass(data) {
+      return data.keys().hasAll(['classId', 'schoolId', 'adminUid', 'className', 'grade', 'gradeBand', 'academicYear', 'teacherUid', 'studentIds', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['classId', 'schoolId', 'adminUid', 'className', 'grade', 'gradeBand', 'academicYear', 'teacherUid', 'studentIds', 'createdAt', 'updatedAt'])
+        && isValidId(data.classId)
+        && isValidId(data.schoolId)
+        && isValidId(data.adminUid)
+        && data.className is string && data.className.size() >= 1 && data.className.size() <= 60
+        && data.grade is int && data.grade >= 1 && data.grade <= 6
+        && data.gradeBand in ['low', 'middle', 'high']
+        && data.academicYear is string && data.academicYear.size() >= 1 && data.academicYear.size() <= 16
+        && isOptionalId(data.teacherUid)
+        && isStringList(data.studentIds, 60)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidStaffMembership(data) {
+      return data.keys().hasAll(['uid', 'schoolId', 'adminUid', 'staffRole', 'classId', 'safetyTier', 'displayLabel', 'redeemedInviteCode', 'active', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'schoolId', 'adminUid', 'staffRole', 'classId', 'safetyTier', 'displayLabel', 'redeemedInviteCode', 'active', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && isValidId(data.schoolId)
+        && isValidId(data.adminUid)
+        && data.staffRole in ['teacher', 'safety_officer']
+        && isOptionalId(data.classId)
+        && data.safetyTier in ['none', 'primary', 'deputy', 'manager']
+        && data.displayLabel is string && data.displayLabel.size() >= 1 && data.displayLabel.size() <= 60
+        && isValidId(data.redeemedInviteCode) && data.redeemedInviteCode.size() >= 10 && data.redeemedInviteCode.size() <= 64
+        && data.active is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidStaffInvite(data) {
+      return data.keys().hasAll(['inviteCode', 'schoolId', 'adminUid', 'targetRole', 'classId', 'safetyTier', 'roleTitleLabel', 'status', 'usedByUid', 'expiresAt', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['inviteCode', 'schoolId', 'adminUid', 'targetRole', 'classId', 'safetyTier', 'roleTitleLabel', 'status', 'usedByUid', 'expiresAt', 'createdAt', 'updatedAt'])
+        && isValidId(data.inviteCode) && data.inviteCode.size() >= 10 && data.inviteCode.size() <= 64
+        && isValidId(data.schoolId)
+        && isValidId(data.adminUid)
+        && data.targetRole in ['teacher', 'safety_officer']
+        && isOptionalId(data.classId)
+        && data.safetyTier in ['none', 'primary', 'deputy', 'manager']
+        && data.roleTitleLabel is string && data.roleTitleLabel.size() >= 1 && data.roleTitleLabel.size() <= 60
+        && data.status in ['active', 'used', 'revoked']
+        && isOptionalId(data.usedByUid)
+        && data.expiresAt is timestamp
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidStudent(data) {
+      return data.keys().hasAll(['studentId', 'schoolId', 'adminUid', 'classId', 'parentUid', 'attendanceNumber', 'nickname', 'grade', 'gradeBand', 'isHomeOnly', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['studentId', 'schoolId', 'adminUid', 'classId', 'parentUid', 'attendanceNumber', 'nickname', 'grade', 'gradeBand', 'isHomeOnly', 'participationOptOut', 'createdAt', 'updatedAt'])
+        && isValidId(data.studentId)
+        && isOptionalId(data.schoolId)
+        && isOptionalId(data.adminUid)
+        && isOptionalId(data.classId)
+        && isOptionalId(data.parentUid)
+        && data.attendanceNumber is int && data.attendanceNumber >= 1 && data.attendanceNumber <= 99
+        && data.nickname is string && data.nickname.size() >= 1 && data.nickname.size() <= 40
+        && data.grade is int && data.grade >= 1 && data.grade <= 6
+        && data.gradeBand in ['low', 'middle', 'high']
+        && data.isHomeOnly is bool
+        && (!('participationOptOut' in data) || data.participationOptOut is bool)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidStudentRecordIndex(data) {
+      return data.keys().hasAll([
+          'studentId', 'schoolId', 'classId', 'gameSessionIds',
+          'childAnswerBothIds', 'childAnswerTeacherIds', 'childAnswerParentIds',
+          'schoolObsOwnIds', 'homeObsOwnIds', 'sharedObsIds', 'gameChildObsBothIds', 'childObsTeacherIds', 'childObsParentIds',
+          'sharingRequestIds', 'schoolHypIds', 'homeHypIds', 'sharedHypIds',
+          'schoolTrialIds', 'homeTrialIds', 'sharedTrialIds', 'consultationIds',
+          'nextFormalSeq', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'studentId', 'schoolId', 'classId', 'gameSessionIds',
+          'childAnswerBothIds', 'childAnswerTeacherIds', 'childAnswerParentIds',
+          'schoolObsOwnIds', 'homeObsOwnIds', 'sharedObsIds', 'gameChildObsBothIds', 'childObsTeacherIds', 'childObsParentIds',
+          'sharingRequestIds', 'schoolHypIds', 'homeHypIds', 'sharedHypIds',
+          'schoolTrialIds', 'homeTrialIds', 'sharedTrialIds', 'consultationIds',
+          'nextFormalSeq', 'lastPlayTicketId', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.studentId)
+        && isOptionalId(data.schoolId)
+        && isOptionalId(data.classId)
+        && isStringList(data.gameSessionIds, 200)
+        && isStringList(data.childAnswerBothIds, 200)
+        && isStringList(data.childAnswerTeacherIds, 200)
+        && isStringList(data.childAnswerParentIds, 200)
+        && isStringList(data.schoolObsOwnIds, 300)
+        && isStringList(data.homeObsOwnIds, 300)
+        && isStringList(data.sharedObsIds, 300)
+        && isStringList(data.gameChildObsBothIds, 300)
+        && isStringList(data.childObsTeacherIds, 200)
+        && isStringList(data.childObsParentIds, 200)
+        && isStringList(data.sharingRequestIds, 200)
+        && isStringList(data.schoolHypIds, 100)
+        && isStringList(data.homeHypIds, 100)
+        && isStringList(data.sharedHypIds, 100)
+        && isStringList(data.schoolTrialIds, 100)
+        && isStringList(data.homeTrialIds, 100)
+        && isStringList(data.sharedTrialIds, 100)
+        && isStringList(data.consultationIds, 100)
+        && data.nextFormalSeq is int && data.nextFormalSeq >= 1
+        && (!('lastPlayTicketId' in data) || isOptionalId(data.lastPlayTicketId))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidStudentInvite(data) {
+      return data.keys().hasAll(['inviteCode', 'studentId', 'schoolId', 'classId', 'adminUid', 'grade', 'status', 'requestedByParentUid', 'expiresAt', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['inviteCode', 'studentId', 'schoolId', 'classId', 'adminUid', 'grade', 'status', 'requestedByParentUid', 'expiresAt', 'createdAt', 'updatedAt'])
+        && isValidId(data.inviteCode) && data.inviteCode.size() >= 10 && data.inviteCode.size() <= 64
+        && isValidId(data.studentId)
+        && isValidId(data.schoolId)
+        && isValidId(data.classId)
+        && isValidId(data.adminUid)
+        && data.grade is int && data.grade >= 1 && data.grade <= 6
+        && data.status in ['active', 'pending_approval', 'approved', 'revoked']
+        && isOptionalId(data.requestedByParentUid)
+        && data.expiresAt is timestamp
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidParentLinkRequest(data) {
+      return data.keys().hasAll(['requestId', 'inviteCode', 'studentId', 'schoolId', 'classId', 'adminUid', 'parentUid', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['requestId', 'inviteCode', 'studentId', 'schoolId', 'classId', 'adminUid', 'parentUid', 'status', 'createdAt', 'updatedAt'])
+        && isValidId(data.requestId)
+        && isValidId(data.inviteCode) && data.inviteCode.size() >= 10 && data.inviteCode.size() <= 64
+        && isValidId(data.studentId)
+        && isValidId(data.schoolId)
+        && isValidId(data.classId)
+        && isValidId(data.adminUid)
+        && isValidId(data.parentUid)
+        && data.status in ['pending', 'approved', 'declined']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidGameSession(data) {
+      return data.keys().hasAll([
+          'sessionId', 'studentId', 'schoolId', 'classId', 'gameType', 'attemptNumber',
+          'version', 'form', 'orderPattern', 'grade', 'gradeBand', 'place', 'deviceType',
+          'usedTts', 'paused', 'items', 'factSentence', 'conditionSummary', 'dateLabel', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'sessionId', 'studentId', 'schoolId', 'classId', 'gameType', 'attemptNumber',
+          'version', 'form', 'orderPattern', 'grade', 'gradeBand', 'place', 'deviceType',
+          'usedTts', 'paused', 'items', 'factSentence', 'conditionSummary', 'dateLabel',
+          'playTicketId', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.sessionId)
+        && isValidId(data.studentId)
+        && isOptionalId(data.schoolId)
+        && isOptionalId(data.classId)
+        && data.gameType in ['shopping', 'delivery']
+        && data.attemptNumber is int && data.attemptNumber >= 1 && data.attemptNumber <= 1000
+        && data.version is string && data.version.size() >= 1 && data.version.size() <= 32
+        && data.form in ['A', 'B']
+        && data.orderPattern in ['illust_first', 'text_first', 'fixed']
+        && data.grade is int && data.grade >= 1 && data.grade <= 6
+        && data.gradeBand in ['low', 'middle', 'high']
+        && data.place in ['school', 'home']
+        && data.deviceType in ['tablet', 'smartphone', 'pc']
+        && data.usedTts is bool
+        && data.paused is bool
+        && isMapList(data.items, 30)
+        && data.factSentence is string && data.factSentence.size() <= 1000
+        && data.conditionSummary is string && data.conditionSummary.size() <= 1000
+        && data.dateLabel is string && data.dateLabel.size() <= 32
+        && (!('playTicketId' in data) || isOptionalId(data.playTicketId))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidChildAnswer(data) {
+      return data.keys().hasAll([
+          'answerId', 'studentId', 'schoolId', 'classId', 'questionType', 'questionId',
+          'questionText', 'choices', 'freeText', 'followupTranscript', 'visibility',
+          'isDistressSignal', 'factSentence', 'dateLabel', 'place', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'answerId', 'studentId', 'schoolId', 'classId', 'questionType', 'questionId',
+          'questionText', 'choices', 'freeText', 'followupTranscript', 'visibility',
+          'isDistressSignal', 'factSentence', 'dateLabel', 'place',
+          'playTicketId', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.answerId)
+        && isValidId(data.studentId)
+        && isOptionalId(data.schoolId)
+        && isOptionalId(data.classId)
+        && data.questionType in ['base', 'interlude', 'talk_trouble']
+        && data.questionId is string && data.questionId.size() >= 1 && data.questionId.size() <= 64
+        && data.questionText is string && data.questionText.size() >= 1 && data.questionText.size() <= 500
+        && isStringList(data.choices, 20)
+        && data.freeText is string && data.freeText.size() <= 1000
+        && data.followupTranscript is string && data.followupTranscript.size() <= 2500
+        && data.visibility in ['teacher', 'parent', 'both', 'none']
+        && data.isDistressSignal is bool
+        && data.factSentence is string && data.factSentence.size() <= 1000
+        && data.dateLabel is string && data.dateLabel.size() <= 32
+        && data.place in ['school', 'home']
+        && (!('playTicketId' in data) || isOptionalId(data.playTicketId))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidObservation(data) {
+      return data.keys().hasAll([
+          'observationId', 'formalId', 'studentId', 'schoolId', 'classId', 'side',
+          'category', 'fact', 'shareStatus', 'visibleTo', 'pendingRequestId',
+          'correctsObservationId', 'dateLabel', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'observationId', 'formalId', 'studentId', 'schoolId', 'classId', 'side',
+          'category', 'fact', 'shareStatus', 'visibleTo', 'pendingRequestId',
+          'correctsObservationId', 'dateLabel', 'playTicketId', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.observationId)
+        && data.formalId is string && data.formalId.size() >= 1 && data.formalId.size() <= 32
+        && isValidId(data.studentId)
+        && isOptionalId(data.schoolId)
+        && isOptionalId(data.classId)
+        && data.side in ['game', 'child', 'school', 'home']
+        && data.category in ['strength', 'worked_well', 'hard', 'child_said', 'other']
+        && data.fact is string && data.fact.size() >= 1 && data.fact.size() <= 2000
+        && data.shareStatus in ['not_shared', 'shared', 'stopped']
+        && data.visibleTo in ['both', 'teacher', 'parent', 'none']
+        && isOptionalId(data.pendingRequestId)
+        && isOptionalId(data.correctsObservationId)
+        && data.dateLabel is string && data.dateLabel.size() <= 32
+        && (!('playTicketId' in data) || isOptionalId(data.playTicketId))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSharingRequest(data) {
+      return data.keys().hasAll([
+          'requestId', 'observationId', 'studentId', 'schoolId', 'classId',
+          'fromSide', 'toSide', 'category', 'previewText', 'purposeText',
+          'status', 'replyChoice', 'replySupplement', 'dateLabel', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'requestId', 'observationId', 'studentId', 'schoolId', 'classId',
+          'fromSide', 'toSide', 'category', 'previewText', 'purposeText',
+          'status', 'replyChoice', 'replySupplement', 'dateLabel', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.requestId)
+        && isValidId(data.observationId)
+        && isValidId(data.studentId)
+        && isOptionalId(data.schoolId)
+        && isOptionalId(data.classId)
+        && data.fromSide in ['school', 'home']
+        && data.toSide in ['school', 'home']
+        && data.fromSide != data.toSide
+        && data.category in ['strength', 'worked_well', 'hard', 'child_said', 'other']
+        && data.previewText is string && data.previewText.size() >= 1 && data.previewText.size() <= 2000
+        && data.purposeText is string && data.purposeText.size() >= 1 && data.purposeText.size() <= 500
+        && data.status in ['pending', 'approved', 'declined', 'withdrawn']
+        && data.replyChoice is string && data.replyChoice.size() <= 80
+        && data.replySupplement is string && data.replySupplement.size() <= 1500
+        && data.dateLabel is string && data.dateLabel.size() <= 32
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidHypothesis(data) {
+      return data.keys().hasAll([
+          'hypothesisId', 'formalId', 'studentId', 'schoolId', 'classId',
+          'createdBySide', 'shareStatus', 'text', 'why', 'evidenceIds', 'evidenceSides', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'hypothesisId', 'formalId', 'studentId', 'schoolId', 'classId',
+          'createdBySide', 'shareStatus', 'text', 'why', 'evidenceIds', 'evidenceSides', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.hypothesisId)
+        && data.formalId is string && data.formalId.size() >= 1 && data.formalId.size() <= 32
+        && isValidId(data.studentId)
+        && isOptionalId(data.schoolId)
+        && isOptionalId(data.classId)
+        && data.createdBySide in ['school', 'home']
+        && data.shareStatus in ['not_shared', 'shared', 'stopped']
+        && data.text is string && data.text.size() >= 1 && data.text.size() <= 1500
+        && data.why is string && data.why.size() >= 1 && data.why.size() <= 1500
+        && isStringList(data.evidenceIds, 25) && data.evidenceIds.size() >= 1
+        && isStringList(data.evidenceSides, 4) && data.evidenceSides.size() >= 1
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTrial(data) {
+      return data.keys().hasAll([
+          'trialId', 'formalId', 'studentId', 'schoolId', 'classId', 'where', 'shareStatus',
+          'whatToChange', 'why', 'basedOnIds', 'adjustsTrialId',
+          'adultResult', 'childBurden', 'continuedStatus', 'childFeedback', 'childFeedbackNote',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'trialId', 'formalId', 'studentId', 'schoolId', 'classId', 'where', 'shareStatus',
+          'whatToChange', 'why', 'basedOnIds', 'adjustsTrialId',
+          'adultResult', 'childBurden', 'continuedStatus', 'childFeedback', 'childFeedbackNote',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.trialId)
+        && data.formalId is string && data.formalId.size() >= 1 && data.formalId.size() <= 32
+        && isValidId(data.studentId)
+        && isOptionalId(data.schoolId)
+        && isOptionalId(data.classId)
+        && data.where in ['school', 'home']
+        && data.shareStatus in ['not_shared', 'shared', 'stopped']
+        && data.whatToChange is string && data.whatToChange.size() >= 1 && data.whatToChange.size() <= 500
+        && data.why is string && data.why.size() <= 1000
+        && isStringList(data.basedOnIds, 25)
+        && isOptionalId(data.adjustsTrialId)
+        && data.adultResult in ['unrecorded', 'helpful', 'depends', 'not_fit']
+        && data.childBurden in ['unrecorded', 'easier', 'same', 'harder']
+        && data.continuedStatus in ['unrecorded', 'continued', 'stopped', 'sometimes']
+        && data.childFeedback in ['unrecorded', 'good', 'normal', 'disliked']
+        && data.childFeedbackNote is string && data.childFeedbackNote.size() <= 500
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidConsultation(data) {
+      return data.keys().hasAll([
+          'consultationId', 'studentId', 'schoolId', 'classId',
+          'selectedRecordSummaries', 'messageBody', 'teacherReply', 'status', 'dateLabel', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'consultationId', 'studentId', 'schoolId', 'classId',
+          'selectedRecordSummaries', 'messageBody', 'teacherReply', 'status', 'dateLabel', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.consultationId)
+        && isValidId(data.studentId)
+        && isValidId(data.schoolId)
+        && isValidId(data.classId)
+        && isStringList(data.selectedRecordSummaries, 30)
+        && data.messageBody is string && data.messageBody.size() >= 1 && data.messageBody.size() <= 3000
+        && data.teacherReply is string && data.teacherReply.size() <= 3000
+        && data.status in ['sent', 'replied']
+        && data.dateLabel is string && data.dateLabel.size() <= 32
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSchoolSafetyQueue(data) {
+      return data.keys().hasAll(['schoolId', 'reportIds', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['schoolId', 'reportIds', 'createdAt', 'updatedAt'])
+        && isValidId(data.schoolId)
+        && isStringList(data.reportIds, 300)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSafetyReport(data) {
+      return data.keys().hasAll([
+          'reportId', 'schoolId', 'classId', 'studentId', 'studentNickname', 'place',
+          'triggerSource', 'childWords', 'createdAtMs', 'primaryDeadlineMs', 'deputyDeadlineMs',
+          'status', 'hasOpened', 'openedAtMs', 'confirmedByUid', 'confirmedByLabel',
+          'actionsTaken', 'actionNote', 'hasActed', 'actedAtMs', 'teacherNoticeId', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'reportId', 'schoolId', 'classId', 'studentId', 'studentNickname', 'place',
+          'triggerSource', 'childWords', 'createdAtMs', 'primaryDeadlineMs', 'deputyDeadlineMs',
+          'status', 'hasOpened', 'openedAtMs', 'confirmedByUid', 'confirmedByLabel',
+          'actionsTaken', 'actionNote', 'hasActed', 'actedAtMs', 'teacherNoticeId',
+          'playTicketId', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.reportId)
+        && isValidId(data.schoolId)
+        && isOptionalId(data.classId)
+        && isValidId(data.studentId)
+        && data.studentNickname is string && data.studentNickname.size() >= 1 && data.studentNickname.size() <= 40
+        && data.place in ['school', 'home']
+        && data.triggerSource in ['talk_button_scary', 'keyword_detected', 'gemini_safety_review']
+        && data.childWords is string && data.childWords.size() >= 1 && data.childWords.size() <= 2000
+        && data.createdAtMs is int && data.createdAtMs > 0
+        && data.primaryDeadlineMs is int && data.primaryDeadlineMs >= data.createdAtMs
+        && data.deputyDeadlineMs is int && data.deputyDeadlineMs >= data.primaryDeadlineMs
+        && data.status in ['unconfirmed', 'opened', 'responded']
+        && data.hasOpened is bool
+        && data.openedAtMs is int && data.openedAtMs >= 0
+        && isOptionalId(data.confirmedByUid)
+        && data.confirmedByLabel is string && data.confirmedByLabel.size() <= 80
+        && isStringList(data.actionsTaken, 15)
+        && data.actionNote is string && data.actionNote.size() <= 2000
+        && data.hasActed is bool
+        && data.actedAtMs is int && data.actedAtMs >= 0
+        && isOptionalId(data.teacherNoticeId)
+        && (!('playTicketId' in data) || isOptionalId(data.playTicketId))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTeacherSafetyNotice(data) {
+      return data.keys().hasAll(['noticeId', 'schoolId', 'classId', 'status', 'officerSharedNote', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['noticeId', 'schoolId', 'classId', 'status', 'officerSharedNote', 'createdAt', 'updatedAt'])
+        && isValidId(data.noticeId)
+        && isValidId(data.schoolId)
+        && isValidId(data.classId)
+        && data.status in ['checking', 'resolved']
+        && data.officerSharedNote is string && data.officerSharedNote.size() <= 1000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidParentFollowup(data) {
+      return data.keys().hasAll(['followupId', 'parentUid', 'studentId', 'currentSituation', 'memoHelpful', 'consentForImprovement', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['followupId', 'parentUid', 'studentId', 'currentSituation', 'memoHelpful', 'consentForImprovement', 'createdAt', 'updatedAt'])
+        && isValidId(data.followupId)
+        && isValidId(data.parentUid)
+        && isValidId(data.studentId)
+        && data.currentSituation in ['consulted_teacher', 'consulted_specialist', 'planning_to_consult', 'trying_at_school', 'thinking']
+        && data.memoHelpful in ['none', 'helpful', 'somewhat', 'not_used']
+        && data.consentForImprovement is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAccessLog(data) {
+      return data.keys().hasAll(['logId', 'schoolId', 'adminUid', 'actorUid', 'actorRole', 'actionLabel', 'studentIdRef', 'createdAt'])
+        && data.keys().hasOnly(['logId', 'schoolId', 'adminUid', 'actorUid', 'actorRole', 'actionLabel', 'studentIdRef', 'createdAt'])
+        && isValidId(data.logId)
+        && isOptionalId(data.schoolId)
+        && isOptionalId(data.adminUid)
+        && isValidId(data.actorUid)
+        && data.actorRole in ['school_admin', 'safety_officer', 'teacher', 'parent']
+        && data.actionLabel is string && data.actionLabel.size() >= 1 && data.actionLabel.size() <= 120
+        && isOptionalId(data.studentIdRef)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidClassroomSession(data) {
+      return data.keys().hasAll([
+          'classId', 'schoolId', 'adminUid', 'teacherUid', 'className',
+          'classJoinCode', 'isOpen', 'allowTakeHome', 'connectedCount',
+          'openedAt', 'expiresAt', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'classId', 'schoolId', 'adminUid', 'teacherUid', 'className',
+          'classJoinCode', 'isOpen', 'allowTakeHome', 'connectedCount',
+          'openedAt', 'expiresAt', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.classId)
+        && isValidId(data.schoolId)
+        && isOptionalId(data.adminUid)
+        && isValidId(data.teacherUid)
+        && data.className is string && data.className.size() >= 1 && data.className.size() <= 60
+        && isValidId(data.classJoinCode) && data.classJoinCode.size() >= 6 && data.classJoinCode.size() <= 32
+        && data.isOpen is bool
+        && data.allowTakeHome is bool
+        && data.connectedCount is int && data.connectedCount >= 0 && data.connectedCount <= 500
+        && data.openedAt is timestamp
+        && data.expiresAt is timestamp
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidClassroomJoinCode(data) {
+      return data.keys().hasAll(['classJoinCode', 'classId', 'schoolId', 'teacherUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['classJoinCode', 'classId', 'schoolId', 'teacherUid', 'createdAt', 'updatedAt'])
+        && isValidId(data.classJoinCode) && data.classJoinCode.size() >= 6 && data.classJoinCode.size() <= 32
+        && isValidId(data.classId)
+        && isValidId(data.schoolId)
+        && isValidId(data.teacherUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidClassroomRoster(data) {
+      return data.keys().hasAll(['classId', 'schoolId', 'teacherUid', 'entries', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['classId', 'schoolId', 'teacherUid', 'entries', 'createdAt', 'updatedAt'])
+        && isValidId(data.classId)
+        && isValidId(data.schoolId)
+        && isValidId(data.teacherUid)
+        && isMapList(data.entries, 60)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSchoolPseudoBinding(data) {
+      return data.keys().hasAll([
+          'pseudoHash', 'schoolId', 'classId', 'studentId',
+          'attendanceNumber', 'grade', 'gradeBand', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'pseudoHash', 'schoolId', 'classId', 'studentId',
+          'attendanceNumber', 'grade', 'gradeBand', 'createdAt', 'updatedAt'
+        ])
+        && isHex64(data.pseudoHash)
+        && isValidId(data.schoolId)
+        && isValidId(data.classId)
+        && isValidId(data.studentId)
+        && data.attendanceNumber is int && data.attendanceNumber >= 1 && data.attendanceNumber <= 99
+        && data.grade is int && data.grade >= 1 && data.grade <= 6
+        && data.gradeBand in ['low', 'middle', 'high']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidStudentQrCard(data) {
+      return data.keys().hasAll([
+          'qrTokenHash', 'cardCodeHint', 'schoolId', 'adminUid', 'teacherUid',
+          'classId', 'className', 'studentId', 'attendanceNumber', 'grade', 'gradeBand',
+          'participationOptOut', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'qrTokenHash', 'cardCodeHint', 'schoolId', 'adminUid', 'teacherUid',
+          'classId', 'className', 'studentId', 'attendanceNumber', 'grade', 'gradeBand',
+          'participationOptOut', 'status', 'createdAt', 'updatedAt'
+        ])
+        && isHex64(data.qrTokenHash)
+        && data.cardCodeHint is string && data.cardCodeHint.size() >= 1 && data.cardCodeHint.size() <= 12
+        && isValidId(data.schoolId)
+        && isOptionalId(data.adminUid)
+        && isOptionalId(data.teacherUid)
+        && isValidId(data.classId)
+        && data.className is string && data.className.size() <= 60
+        && isValidId(data.studentId)
+        && data.attendanceNumber is int && data.attendanceNumber >= 1 && data.attendanceNumber <= 99
+        && data.grade is int && data.grade >= 1 && data.grade <= 6
+        && data.gradeBand in ['low', 'middle', 'high']
+        && data.participationOptOut is bool
+        && data.status in ['active', 'revoked']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidStudentPlayTicket(data) {
+      return data.keys().hasAll([
+          'ticketId', 'studentId', 'schoolId', 'classId',
+          'mode', 'authProofHash', 'authMethod', 'expiresAt', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'ticketId', 'studentId', 'schoolId', 'classId',
+          'mode', 'authProofHash', 'authMethod', 'expiresAt', 'createdAt'
+        ])
+        && isValidId(data.ticketId) && data.ticketId.size() >= 16 && data.ticketId.size() <= 64
+        && isValidId(data.studentId)
+        && isValidId(data.schoolId)
+        && isValidId(data.classId)
+        && data.mode in ['classroom', 'take_home']
+        && isHex64(data.authProofHash)
+        && data.authMethod in ['pseudo', 'qr']
+        && data.expiresAt is timestamp
+        && data.createdAt is timestamp;
+    }
+
+    function isValidStudentReward(data) {
+      return data.keys().hasAll([
+          'studentId', 'schoolId', 'classId', 'coins', 'totalSpins',
+          'unlockedItemIds', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'studentId', 'schoolId', 'classId', 'coins', 'totalSpins',
+          'unlockedItemIds', 'lastPlayTicketId', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.studentId)
+        && isOptionalId(data.schoolId)
+        && isOptionalId(data.classId)
+        && data.coins is int && data.coins >= 0 && data.coins <= 99999
+        && data.totalSpins is int && data.totalSpins >= 0 && data.totalSpins <= 9999
+        && isStringList(data.unlockedItemIds, 64)
+        && (!('lastPlayTicketId' in data) || isOptionalId(data.lastPlayTicketId))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // =========================================================================
+    // Collection Match Blocks
+    // =========================================================================
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+      allow list: if false;
+      allow create: if isVerified()
+        && isValidId(userId)
+        && request.auth.uid == userId
+        && isValidUserAccount(incoming())
+        && incoming().uid == userId
+        && incoming().homeSafetyConfirmed == false
+        && (!incoming().isHomeOnly || incoming().role == 'parent')
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerified()
+        && isValidId(userId)
+        && request.auth.uid == userId
+        && isValidUserAccount(incoming())
+        && incoming().uid == existing().uid
+        && incoming().role == existing().role
+        && incoming().homeSafetyConfirmed == existing().homeSafetyConfirmed
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['schoolId', 'isHomeOnly', 'updatedAt']);
+      allow delete: if isVerified() && isValidId(userId) && request.auth.uid == userId;
+    }
+
+    match /schools/{schoolId} {
+      allow get: if isSignedIn()
+        && isValidId(schoolId)
+        && resource != null
+        && (existing().adminUid == request.auth.uid || isMemberOfSchool(schoolId));
+      allow list: if isSignedIn() && resource.data.adminUid == request.auth.uid;
+      allow create: if isVerified()
+        && isValidId(schoolId)
+        && isValidSchool(incoming())
+        && incoming().schoolId == schoolId
+        && incoming().adminUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerified()
+        && isValidId(schoolId)
+        && isValidSchool(incoming())
+        && existing().adminUid == request.auth.uid
+        && incoming().schoolId == existing().schoolId
+        && incoming().adminUid == existing().adminUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'schoolCodeLabel', 'academicYear', 'retentionMonths',
+          'checkBoardApproved', 'checkParentConsent', 'checkChildExplain', 'checkSpecialistDocs', 'checkSafetyWorkflow',
+          'allPreChecksDone', 'directorySupervisor', 'directoryVersion', 'safetySupervisor', 'safetyVersion',
+          'primaryOfficerLabel', 'deputyOfficerLabel', 'managerOfficerLabel',
+          'escalateToDeputyMinutes', 'escalateToManagerMinutes', 'offHoursRule',
+          'invitesIssuedCount', 'linkedHouseholdsCount', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+
+    match /classes/{classId} {
+      allow get: if isSignedIn()
+        && isValidId(classId)
+        && resource != null
+        && (existing().adminUid == request.auth.uid || isActiveTeacherOfClass(classId));
+      allow list: if isSignedIn()
+        && (resource.data.adminUid == request.auth.uid || resource.data.teacherUid == request.auth.uid);
+      allow create: if isVerified()
+        && isValidId(classId)
+        && isValidSchoolClass(incoming())
+        && incoming().classId == classId
+        && incoming().adminUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isSchoolAdmin(incoming().schoolId);
+      allow update: if isVerified()
+        && isValidId(classId)
+        && isValidSchoolClass(incoming())
+        && incoming().classId == existing().classId
+        && incoming().schoolId == existing().schoolId
+        && incoming().adminUid == existing().adminUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (existing().adminUid == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['className', 'grade', 'gradeBand', 'academicYear', 'teacherUid', 'studentIds', 'updatedAt']))
+          ||
+          (incoming().teacherUid == request.auth.uid
+            && (isActiveTeacherOfClass(classId)
+                || (existsAfter(/databases/$(database)/documents/staff_memberships/$(request.auth.uid))
+                    && getAfter(/databases/$(database)/documents/staff_memberships/$(request.auth.uid)).data.active == true
+                    && getAfter(/databases/$(database)/documents/staff_memberships/$(request.auth.uid)).data.staffRole == 'teacher'
+                    && getAfter(/databases/$(database)/documents/staff_memberships/$(request.auth.uid)).data.classId == classId))
+            && incoming().diff(existing()).affectedKeys().hasOnly(['teacherUid', 'updatedAt']))
+        );
+      allow delete: if false;
+    }
+
+    match /staff_invites/{inviteCode} {
+      allow get: if isSignedIn() && isValidId(inviteCode);
+      allow list: if isSignedIn() && resource.data.adminUid == request.auth.uid;
+      allow create: if isVerified()
+        && isValidId(inviteCode)
+        && isValidStaffInvite(incoming())
+        && incoming().inviteCode == inviteCode
+        && incoming().adminUid == request.auth.uid
+        && incoming().status == 'active'
+        && incoming().usedByUid == ''
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isSchoolAdmin(incoming().schoolId);
+      allow update: if isVerified()
+        && isValidId(inviteCode)
+        && isValidStaffInvite(incoming())
+        && incoming().inviteCode == existing().inviteCode
+        && incoming().schoolId == existing().schoolId
+        && incoming().adminUid == existing().adminUid
+        && incoming().targetRole == existing().targetRole
+        && incoming().classId == existing().classId
+        && incoming().safetyTier == existing().safetyTier
+        && incoming().expiresAt == existing().expiresAt
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && existing().status == 'active'
+        && (
+          (existing().adminUid == request.auth.uid
+            && incoming().status == 'revoked'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+          ||
+          (existing().expiresAt > request.time
+            && incoming().status == 'used'
+            && incoming().usedByUid == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'usedByUid', 'updatedAt']))
+        );
+      allow delete: if false;
+    }
+
+    match /staff_memberships/{userId} {
+      allow get: if isSignedIn()
+        && isValidId(userId)
+        && (request.auth.uid == userId || (resource != null && existing().adminUid == request.auth.uid));
+      allow list: if isSignedIn() && resource.data.adminUid == request.auth.uid;
+      allow create: if isVerified()
+        && isValidId(userId)
+        && request.auth.uid == userId
+        && isValidStaffMembership(incoming())
+        && incoming().uid == userId
+        && incoming().active == true
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/staff_invites/$(incoming().redeemedInviteCode))
+        && get(/databases/$(database)/documents/staff_invites/$(incoming().redeemedInviteCode)).data.status == 'active'
+        && get(/databases/$(database)/documents/staff_invites/$(incoming().redeemedInviteCode)).data.expiresAt > request.time
+        && get(/databases/$(database)/documents/staff_invites/$(incoming().redeemedInviteCode)).data.schoolId == incoming().schoolId
+        && get(/databases/$(database)/documents/staff_invites/$(incoming().redeemedInviteCode)).data.targetRole == incoming().staffRole
+        && get(/databases/$(database)/documents/staff_invites/$(incoming().redeemedInviteCode)).data.classId == incoming().classId
+        && get(/databases/$(database)/documents/staff_invites/$(incoming().redeemedInviteCode)).data.safetyTier == incoming().safetyTier
+        && getAfter(/databases/$(database)/documents/staff_invites/$(incoming().redeemedInviteCode)).data.status == 'used'
+        && getAfter(/databases/$(database)/documents/staff_invites/$(incoming().redeemedInviteCode)).data.usedByUid == request.auth.uid;
+      allow update: if isVerified()
+        && isValidId(userId)
+        && isValidStaffMembership(incoming())
+        && existing().adminUid == request.auth.uid
+        && incoming().uid == existing().uid
+        && incoming().schoolId == existing().schoolId
+        && incoming().adminUid == existing().adminUid
+        && incoming().staffRole == existing().staffRole
+        && incoming().redeemedInviteCode == existing().redeemedInviteCode
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['classId', 'safetyTier', 'displayLabel', 'active', 'updatedAt']);
+      allow delete: if false;
+    }
+
+    match /students/{studentId} {
+      allow get: if isSignedIn()
+        && isValidId(studentId)
+        && resource != null
+        && (
+          existing().adminUid == request.auth.uid
+          || isActiveTeacherOfClass(existing().classId)
+          || existing().parentUid == request.auth.uid
+        );
+      allow list: if isSignedIn()
+        && (resource.data.adminUid == request.auth.uid || resource.data.parentUid == request.auth.uid);
+      allow create: if isVerified()
+        && isValidId(studentId)
+        && isValidStudent(incoming())
+        && incoming().studentId == studentId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          (!incoming().isHomeOnly
+            && incoming().adminUid == request.auth.uid
+            && isSchoolAdmin(incoming().schoolId)
+            && isSchoolPreChecked(incoming().schoolId))
+          ||
+          (incoming().isHomeOnly == true
+            && incoming().parentUid == request.auth.uid
+            && incoming().schoolId == ''
+            && incoming().adminUid == ''
+            && incoming().classId == '')
+        );
+      allow update: if isVerified()
+        && isValidId(studentId)
+        && isValidStudent(incoming())
+        && incoming().studentId == existing().studentId
+        && incoming().schoolId == existing().schoolId
+        && incoming().adminUid == existing().adminUid
+        && incoming().isHomeOnly == existing().isHomeOnly
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (existing().adminUid == request.auth.uid
+            && !existing().isHomeOnly
+            && incoming().diff(existing()).affectedKeys().hasOnly(['parentUid', 'classId', 'attendanceNumber', 'nickname', 'grade', 'gradeBand', 'participationOptOut', 'updatedAt']))
+          ||
+          (!existing().isHomeOnly
+            && isActiveTeacherOfClass(existing().classId)
+            && incoming().diff(existing()).affectedKeys().hasOnly(['participationOptOut', 'updatedAt']))
+          ||
+          (existing().parentUid == request.auth.uid
+            && !existing().isHomeOnly
+            && incoming().parentUid == existing().parentUid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['participationOptOut', 'updatedAt']))
+          ||
+          (existing().parentUid == request.auth.uid
+            && incoming().parentUid == ''
+            && incoming().diff(existing()).affectedKeys().hasOnly(['parentUid', 'updatedAt']))
+          ||
+          (existing().isHomeOnly == true
+            && existing().parentUid == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['nickname', 'grade', 'gradeBand', 'updatedAt']))
+        );
+      allow delete: if isVerified()
+        && isValidId(studentId)
+        && (
+          (!existing().isHomeOnly && existing().adminUid == request.auth.uid)
+          || (existing().isHomeOnly == true && existing().parentUid == request.auth.uid)
+        );
+    }
+
+    match /student_record_indexes/{studentId} {
+      allow get: if isSignedIn()
+        && isValidId(studentId)
+        && resource != null
+        && (isActiveTeacherOfClass(existing().classId) || isApprovedParentOfStudent(studentId));
+      allow list: if false;
+      allow create: if isVerified()
+        && isValidId(studentId)
+        && isValidStudentRecordIndex(incoming())
+        && incoming().studentId == studentId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          (incoming().schoolId != '' && isSchoolAdminOrAfter(incoming().schoolId))
+          || isApprovedParentOfStudentOrAfter(studentId)
+        );
+      allow update: if isValidId(studentId)
+        && isValidStudentRecordIndex(incoming())
+        && incoming().studentId == existing().studentId
+        && incoming().schoolId == existing().schoolId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (isVerified()
+            && isActiveTeacherOfClass(existing().classId)
+            && incoming().classId == existing().classId
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'gameSessionIds', 'childAnswerBothIds', 'childAnswerTeacherIds', 'childAnswerParentIds',
+              'schoolObsOwnIds', 'sharedObsIds', 'gameChildObsBothIds', 'childObsTeacherIds', 'childObsParentIds',
+              'sharingRequestIds', 'schoolHypIds', 'sharedHypIds', 'schoolTrialIds', 'sharedTrialIds',
+              'nextFormalSeq', 'updatedAt'
+            ]))
+          ||
+          (isVerified()
+            && isApprovedParentOfStudent(studentId)
+            && incoming().classId == existing().classId
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'gameSessionIds', 'childAnswerBothIds', 'childAnswerTeacherIds', 'childAnswerParentIds',
+              'homeObsOwnIds', 'sharedObsIds', 'gameChildObsBothIds', 'childObsTeacherIds', 'childObsParentIds',
+              'sharingRequestIds', 'homeHypIds', 'sharedHypIds', 'homeTrialIds', 'sharedTrialIds',
+              'consultationIds', 'nextFormalSeq', 'updatedAt'
+            ]))
+          ||
+          (isVerified()
+            && existing().schoolId != ''
+            && isSchoolAdmin(existing().schoolId)
+            && incoming().diff(existing()).affectedKeys().hasOnly(['classId', 'updatedAt']))
+          ||
+          ('lastPlayTicketId' in incoming()
+            && incoming().classId == existing().classId
+            && isStudentNotOptedOut(studentId)
+            && hasValidAnyPlaceTicket(incoming().lastPlayTicketId, studentId, existing().schoolId, existing().classId)
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'gameSessionIds', 'childAnswerBothIds', 'childAnswerTeacherIds', 'childAnswerParentIds',
+              'gameChildObsBothIds', 'childObsTeacherIds', 'childObsParentIds',
+              'lastPlayTicketId', 'updatedAt'
+            ]))
+        );
+      allow delete: if isVerified()
+        && isValidId(studentId)
+        && (
+          (existing().schoolId != '' && isSchoolAdmin(existing().schoolId))
+          || (existing().schoolId == '' && isApprovedParentOfStudent(studentId))
+        );
+    }
+
+    match /student_invites/{inviteCode} {
+      allow get: if isSignedIn() && isValidId(inviteCode);
+      allow list: if isSignedIn()
+        && (resource.data.adminUid == request.auth.uid || resource.data.requestedByParentUid == request.auth.uid);
+      allow create: if isVerified()
+        && isValidId(inviteCode)
+        && isValidStudentInvite(incoming())
+        && incoming().inviteCode == inviteCode
+        && incoming().adminUid == request.auth.uid
+        && incoming().status == 'active'
+        && incoming().requestedByParentUid == ''
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isSchoolAdmin(incoming().schoolId);
+      allow update: if isVerified()
+        && isValidId(inviteCode)
+        && isValidStudentInvite(incoming())
+        && incoming().inviteCode == existing().inviteCode
+        && incoming().studentId == existing().studentId
+        && incoming().schoolId == existing().schoolId
+        && incoming().classId == existing().classId
+        && incoming().adminUid == existing().adminUid
+        && incoming().grade == existing().grade
+        && incoming().expiresAt == existing().expiresAt
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (existing().adminUid == request.auth.uid
+            && existing().status in ['active', 'pending_approval']
+            && incoming().status in ['approved', 'revoked', 'active']
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+          ||
+          (existing().status == 'active'
+            && existing().expiresAt > request.time
+            && incoming().status == 'pending_approval'
+            && incoming().requestedByParentUid == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'requestedByParentUid', 'updatedAt']))
+        );
+      allow delete: if false;
+    }
+
+    match /parent_link_requests/{requestId} {
+      allow get: if isSignedIn()
+        && isValidId(requestId)
+        && resource != null
+        && (existing().adminUid == request.auth.uid || existing().parentUid == request.auth.uid);
+      allow list: if isSignedIn()
+        && (resource.data.adminUid == request.auth.uid || resource.data.parentUid == request.auth.uid);
+      allow create: if isVerified()
+        && isValidId(requestId)
+        && isValidParentLinkRequest(incoming())
+        && incoming().requestId == requestId
+        && incoming().parentUid == request.auth.uid
+        && incoming().status == 'pending'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/student_invites/$(incoming().inviteCode))
+        && get(/databases/$(database)/documents/student_invites/$(incoming().inviteCode)).data.status == 'active'
+        && get(/databases/$(database)/documents/student_invites/$(incoming().inviteCode)).data.expiresAt > request.time
+        && get(/databases/$(database)/documents/student_invites/$(incoming().inviteCode)).data.studentId == incoming().studentId
+        && getAfter(/databases/$(database)/documents/student_invites/$(incoming().inviteCode)).data.status == 'pending_approval';
+      allow update: if isVerified()
+        && isValidId(requestId)
+        && isValidParentLinkRequest(incoming())
+        && existing().adminUid == request.auth.uid
+        && existing().status == 'pending'
+        && incoming().status in ['approved', 'declined']
+        && incoming().requestId == existing().requestId
+        && incoming().studentId == existing().studentId
+        && incoming().parentUid == existing().parentUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // Individual Student Records — Strictly Denied to SchoolAdmin & SafetyOfficer
+    // =========================================================================
+
+    match /game_sessions/{sessionId} {
+      allow get: if isSignedIn()
+        && isValidId(sessionId)
+        && resource != null
+        && (isActiveTeacherOfClass(existing().classId) || isApprovedParentOfStudent(existing().studentId));
+      allow list: if false;
+      allow create: if isValidId(sessionId)
+        && isValidGameSession(incoming())
+        && incoming().sessionId == sessionId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (incoming().place != 'school' || isStudentNotOptedOut(incoming().studentId))
+        && (
+          (isVerified() && incoming().place == 'school' && isActiveTeacherOfClass(incoming().classId))
+          ||
+          (isVerified()
+            && incoming().place == 'home'
+            && isApprovedParentOfStudent(incoming().studentId)
+            && (incoming().schoolId != ''
+                || (exists(/databases/$(database)/documents/users/$(request.auth.uid))
+                    && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.homeSafetyConfirmed == true)))
+          ||
+          ('playTicketId' in incoming()
+            && isStudentNotOptedOut(incoming().studentId)
+            && hasValidPlayTicket(incoming().playTicketId, incoming().studentId, incoming().schoolId, incoming().classId, incoming().place))
+        );
+      allow update: if false;
+      allow delete: if isVerified()
+        && isValidId(sessionId)
+        && existing().place == 'home'
+        && isApprovedParentOfStudent(existing().studentId);
+    }
+
+    match /child_answers/{answerId} {
+      allow get: if isSignedIn()
+        && isValidId(answerId)
+        && resource != null
+        && (
+          (isActiveTeacherOfClass(existing().classId) && existing().visibility in ['teacher', 'both'])
+          ||
+          (isApprovedParentOfStudent(existing().studentId) && existing().visibility in ['parent', 'both'])
+        );
+      allow list: if false;
+      allow create: if isValidId(answerId)
+        && isValidChildAnswer(incoming())
+        && incoming().answerId == answerId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (incoming().place != 'school' || isStudentNotOptedOut(incoming().studentId))
+        && (
+          (isVerified() && incoming().place == 'school' && isActiveTeacherOfClass(incoming().classId))
+          ||
+          (isVerified() && incoming().place == 'home' && incoming().schoolId != '' && isApprovedParentOfStudent(incoming().studentId))
+          ||
+          ('playTicketId' in incoming()
+            && isStudentNotOptedOut(incoming().studentId)
+            && hasValidPlayTicket(incoming().playTicketId, incoming().studentId, incoming().schoolId, incoming().classId, incoming().place))
+        );
+      allow update: if false;
+      allow delete: if isVerified()
+        && isValidId(answerId)
+        && existing().place == 'home'
+        && isApprovedParentOfStudent(existing().studentId);
+    }
+
+    match /observations/{observationId} {
+      allow get: if isSignedIn()
+        && isValidId(observationId)
+        && resource != null
+        && (
+          (isActiveTeacherOfClass(existing().classId)
+            && (existing().side in ['school', 'game']
+                || (existing().side == 'child' && existing().visibleTo in ['both', 'teacher'])
+                || (existing().side == 'home' && existing().shareStatus == 'shared')))
+          ||
+          (isApprovedParentOfStudent(existing().studentId)
+            && (existing().side in ['home', 'game']
+                || (existing().side == 'child' && existing().visibleTo in ['both', 'parent'])
+                || (existing().side == 'school' && existing().shareStatus == 'shared')))
+        );
+      allow list: if false;
+      allow create: if isValidId(observationId)
+        && isValidObservation(incoming())
+        && incoming().observationId == observationId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          (isVerified() && incoming().side in ['school', 'game', 'child'] && isActiveTeacherOfClass(incoming().classId))
+          ||
+          (isVerified() && incoming().side in ['home', 'game', 'child'] && isApprovedParentOfStudent(incoming().studentId))
+          ||
+          (incoming().side in ['game', 'child']
+            && 'playTicketId' in incoming()
+            && isStudentNotOptedOut(incoming().studentId)
+            && hasValidAnyPlaceTicket(incoming().playTicketId, incoming().studentId, incoming().schoolId, incoming().classId))
+        );
+      allow update: if isVerified()
+        && isValidId(observationId)
+        && isValidObservation(incoming())
+        && incoming().observationId == existing().observationId
+        && incoming().formalId == existing().formalId
+        && incoming().studentId == existing().studentId
+        && incoming().schoolId == existing().schoolId
+        && incoming().classId == existing().classId
+        && incoming().side == existing().side
+        && incoming().category == existing().category
+        && incoming().fact == existing().fact
+        && incoming().visibleTo == existing().visibleTo
+        && incoming().correctsObservationId == existing().correctsObservationId
+        && incoming().dateLabel == existing().dateLabel
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['shareStatus', 'pendingRequestId', 'updatedAt'])
+        && (
+          (existing().side == 'school' && isActiveTeacherOfClass(existing().classId) && incoming().shareStatus in ['not_shared', 'stopped'])
+          ||
+          (existing().side == 'home' && isApprovedParentOfStudent(existing().studentId) && incoming().shareStatus in ['not_shared', 'stopped'])
+          ||
+          (existing().side == 'school'
+            && isApprovedParentOfStudent(existing().studentId)
+            && (
+              (incoming().shareStatus == 'shared'
+                && existing().pendingRequestId != ''
+                && getAfter(/databases/$(database)/documents/sharing_requests/$(existing().pendingRequestId)).data.status == 'approved')
+              ||
+              (existing().shareStatus == 'shared' && incoming().shareStatus == 'stopped')
+            ))
+          ||
+          (existing().side == 'home'
+            && isActiveTeacherOfClass(existing().classId)
+            && (
+              (incoming().shareStatus == 'shared'
+                && existing().pendingRequestId != ''
+                && getAfter(/databases/$(database)/documents/sharing_requests/$(existing().pendingRequestId)).data.status == 'approved')
+              ||
+              (existing().shareStatus == 'shared' && incoming().shareStatus == 'stopped')
+            ))
+        );
+      allow delete: if isVerified()
+        && isValidId(observationId)
+        && existing().side == 'home'
+        && isApprovedParentOfStudent(existing().studentId);
+    }
+
+    match /sharing_requests/{requestId} {
+      allow get: if isSignedIn()
+        && isValidId(requestId)
+        && resource != null
+        && (isActiveTeacherOfClass(existing().classId) || isApprovedParentOfStudent(existing().studentId));
+      allow list: if false;
+      allow create: if isVerified()
+        && isValidId(requestId)
+        && isValidSharingRequest(incoming())
+        && incoming().requestId == requestId
+        && incoming().status == 'pending'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          (incoming().fromSide == 'school' && isActiveTeacherOfClass(incoming().classId))
+          ||
+          (incoming().fromSide == 'home' && isApprovedParentOfStudent(incoming().studentId))
+        );
+      allow update: if isVerified()
+        && isValidId(requestId)
+        && isValidSharingRequest(incoming())
+        && existing().status == 'pending'
+        && incoming().requestId == existing().requestId
+        && incoming().observationId == existing().observationId
+        && incoming().studentId == existing().studentId
+        && incoming().fromSide == existing().fromSide
+        && incoming().toSide == existing().toSide
+        && incoming().previewText == existing().previewText
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          ((existing().fromSide == 'school' && isActiveTeacherOfClass(existing().classId))
+            || (existing().fromSide == 'home' && isApprovedParentOfStudent(existing().studentId)))
+            && incoming().status == 'withdrawn'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+          ||
+          ((existing().toSide == 'home' && isApprovedParentOfStudent(existing().studentId))
+            || (existing().toSide == 'school' && isActiveTeacherOfClass(existing().classId)))
+            && incoming().status in ['approved', 'declined']
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'replyChoice', 'replySupplement', 'updatedAt'])
+        );
+      allow delete: if false;
+    }
+
+    match /hypotheses/{hypothesisId} {
+      allow get: if isSignedIn()
+        && isValidId(hypothesisId)
+        && resource != null
+        && (
+          (isActiveTeacherOfClass(existing().classId) && (existing().createdBySide == 'school' || existing().shareStatus == 'shared'))
+          ||
+          (isApprovedParentOfStudent(existing().studentId) && (existing().createdBySide == 'home' || existing().shareStatus == 'shared'))
+        );
+      allow list: if false;
+      allow create: if isVerified()
+        && isValidId(hypothesisId)
+        && isValidHypothesis(incoming())
+        && incoming().hypothesisId == hypothesisId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          (incoming().createdBySide == 'school' && isActiveTeacherOfClass(incoming().classId))
+          ||
+          (incoming().createdBySide == 'home' && isApprovedParentOfStudent(incoming().studentId))
+        );
+      allow update: if isVerified()
+        && isValidId(hypothesisId)
+        && isValidHypothesis(incoming())
+        && incoming().hypothesisId == existing().hypothesisId
+        && incoming().studentId == existing().studentId
+        && incoming().createdBySide == existing().createdBySide
+        && incoming().text == existing().text
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['shareStatus', 'updatedAt'])
+        && (isActiveTeacherOfClass(existing().classId) || isApprovedParentOfStudent(existing().studentId));
+      allow delete: if isVerified()
+        && isValidId(hypothesisId)
+        && existing().createdBySide == 'home'
+        && isApprovedParentOfStudent(existing().studentId);
+    }
+
+    match /trials/{trialId} {
+      allow get: if isSignedIn()
+        && isValidId(trialId)
+        && resource != null
+        && (
+          (isActiveTeacherOfClass(existing().classId) && (existing().where == 'school' || existing().shareStatus == 'shared'))
+          ||
+          (isApprovedParentOfStudent(existing().studentId) && (existing().where == 'home' || existing().shareStatus == 'shared'))
+        );
+      allow list: if false;
+      allow create: if isVerified()
+        && isValidId(trialId)
+        && isValidTrial(incoming())
+        && incoming().trialId == trialId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          (incoming().where == 'school' && isActiveTeacherOfClass(incoming().classId))
+          ||
+          (incoming().where == 'home' && isApprovedParentOfStudent(incoming().studentId))
+        );
+      allow update: if isVerified()
+        && isValidId(trialId)
+        && isValidTrial(incoming())
+        && incoming().trialId == existing().trialId
+        && incoming().studentId == existing().studentId
+        && incoming().where == existing().where
+        && incoming().whatToChange == existing().whatToChange
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (isActiveTeacherOfClass(existing().classId) || isApprovedParentOfStudent(existing().studentId))
+        && (
+          (incoming().childFeedback == existing().childFeedback
+            && incoming().childFeedbackNote == existing().childFeedbackNote
+            && incoming().diff(existing()).affectedKeys().hasOnly(['adultResult', 'childBurden', 'continuedStatus', 'shareStatus', 'updatedAt']))
+          ||
+          (incoming().adultResult == existing().adultResult
+            && incoming().childBurden == existing().childBurden
+            && incoming().continuedStatus == existing().continuedStatus
+            && incoming().diff(existing()).affectedKeys().hasOnly(['childFeedback', 'childFeedbackNote', 'updatedAt']))
+        );
+      allow delete: if isVerified()
+        && isValidId(trialId)
+        && existing().where == 'home'
+        && isApprovedParentOfStudent(existing().studentId);
+    }
+
+    match /consultations/{consultationId} {
+      allow get: if isSignedIn()
+        && isValidId(consultationId)
+        && resource != null
+        && (isActiveTeacherOfClass(existing().classId) || isApprovedParentOfStudent(existing().studentId));
+      allow list: if false;
+      allow create: if isVerified()
+        && isValidId(consultationId)
+        && isValidConsultation(incoming())
+        && incoming().consultationId == consultationId
+        && incoming().status == 'sent'
+        && incoming().teacherReply == ''
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isApprovedParentOfStudent(incoming().studentId);
+      allow update: if isVerified()
+        && isValidId(consultationId)
+        && isValidConsultation(incoming())
+        && incoming().consultationId == existing().consultationId
+        && incoming().studentId == existing().studentId
+        && incoming().messageBody == existing().messageBody
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && isActiveTeacherOfClass(existing().classId)
+        && incoming().status == 'replied'
+        && incoming().diff(existing()).affectedKeys().hasOnly(['teacherReply', 'status', 'updatedAt']);
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // Isolated Child Safety Flow (Chapter 12B) — ONLY Safety Officers Can Read
+    // =========================================================================
+
+    match /school_safety_queues/{schoolId} {
+      allow get: if isSignedIn()
+        && isValidId(schoolId)
+        && resource != null
+        && isActiveSafetyOfficerOfSchool(schoolId);
+      allow list: if false;
+      allow create: if isVerified()
+        && isValidId(schoolId)
+        && isValidSchoolSafetyQueue(incoming())
+        && incoming().schoolId == schoolId
+        && incoming().reportIds.size() == 0
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isSchoolAdminOrAfter(schoolId);
+      allow update: if isValidId(schoolId)
+        && isValidSchoolSafetyQueue(incoming())
+        && incoming().schoolId == existing().schoolId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().reportIds.size() == existing().reportIds.size() + 1
+        && incoming().diff(existing()).affectedKeys().hasOnly(['reportIds', 'updatedAt'])
+        && (
+          (isVerified() && isMemberOfSchool(schoolId))
+          || (incoming().reportIds.size() >= 1
+              && existsAfter(/databases/$(database)/documents/safety_reports/$(incoming().reportIds[incoming().reportIds.size() - 1]))
+              && getAfter(/databases/$(database)/documents/safety_reports/$(incoming().reportIds[incoming().reportIds.size() - 1])).data.schoolId == schoolId)
+        );
+      allow delete: if false;
+    }
+
+    match /safety_reports/{reportId} {
+      allow get: if isSignedIn()
+        && isValidId(reportId)
+        && resource != null
+        && isActiveSafetyOfficerOfSchool(existing().schoolId);
+      allow list: if false;
+      allow create: if isValidId(reportId)
+        && isValidSafetyReport(incoming())
+        && incoming().reportId == reportId
+        && incoming().status == 'unconfirmed'
+        && incoming().hasOpened == false
+        && incoming().hasActed == false
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          (isVerified() && incoming().place == 'school' && isActiveTeacherOfClass(incoming().classId))
+          ||
+          (isVerified() && incoming().place == 'home' && incoming().schoolId != '' && isApprovedParentOfStudent(incoming().studentId))
+          ||
+          ('playTicketId' in incoming()
+            && incoming().schoolId != ''
+            && hasValidPlayTicket(incoming().playTicketId, incoming().studentId, incoming().schoolId, incoming().classId, incoming().place))
+        );
+      allow update: if isVerified()
+        && isValidId(reportId)
+        && isValidSafetyReport(incoming())
+        && isActiveSafetyOfficerOfSchool(existing().schoolId)
+        && incoming().reportId == existing().reportId
+        && incoming().schoolId == existing().schoolId
+        && incoming().studentId == existing().studentId
+        && incoming().childWords == existing().childWords
+        && incoming().createdAtMs == existing().createdAtMs
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'status', 'hasOpened', 'openedAtMs', 'confirmedByUid', 'confirmedByLabel',
+          'actionsTaken', 'actionNote', 'hasActed', 'actedAtMs', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+
+    match /teacher_safety_notices/{classId} {
+      allow get: if isSignedIn()
+        && isValidId(classId)
+        && (
+          isActiveTeacherOfClass(classId)
+          || (resource != null && isActiveSafetyOfficerOfSchool(existing().schoolId))
+        );
+      allow list: if false;
+      allow create: if isVerified()
+        && isValidId(classId)
+        && isValidTeacherSafetyNotice(incoming())
+        && incoming().noticeId == classId
+        && incoming().classId == classId
+        && incoming().officerSharedNote == ''
+        && incoming().status == 'checking'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isMemberOfSchool(incoming().schoolId);
+      allow update: if isVerified()
+        && isValidId(classId)
+        && isValidTeacherSafetyNotice(incoming())
+        && incoming().noticeId == existing().noticeId
+        && incoming().schoolId == existing().schoolId
+        && incoming().classId == existing().classId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (isActiveSafetyOfficerOfSchool(existing().schoolId)
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'officerSharedNote', 'updatedAt']))
+          ||
+          (isMemberOfSchool(existing().schoolId)
+            && incoming().status == 'checking'
+            && incoming().officerSharedNote == existing().officerSharedNote
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+        );
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // 1-per-Student School Device Classroom Window, Pseudonymous & QR Bindings
+    // =========================================================================
+
+    match /classroom_sessions/{classId} {
+      // Capability get by classId so student tablets can check if class window is open
+      allow get: if isValidId(classId);
+      allow list: if isSignedIn()
+        && (resource.data.teacherUid == request.auth.uid || resource.data.adminUid == request.auth.uid);
+      allow create: if isVerified()
+        && isValidId(classId)
+        && isValidClassroomSession(incoming())
+        && incoming().classId == classId
+        && incoming().teacherUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isActiveTeacherOfClass(classId);
+      allow update: if isValidId(classId)
+        && isValidClassroomSession(incoming())
+        && incoming().classId == existing().classId
+        && incoming().schoolId == existing().schoolId
+        && incoming().adminUid == existing().adminUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (isVerified()
+            && isActiveTeacherOfClass(classId)
+            && incoming().teacherUid == request.auth.uid)
+          ||
+          // Student device increments connectedCount by exactly +1 when minting an active classroom play ticket
+          (existing().isOpen == true
+            && existing().expiresAt > request.time
+            && incoming().connectedCount == existing().connectedCount + 1
+            && incoming().diff(existing()).affectedKeys().hasOnly(['connectedCount', 'updatedAt']))
+        );
+      allow delete: if false;
+    }
+
+    match /classroom_join_codes/{classJoinCode} {
+      allow get: if isValidId(classJoinCode) && classJoinCode.size() >= 6 && classJoinCode.size() <= 32;
+      allow list: if false;
+      allow create: if isVerified()
+        && isValidId(classJoinCode)
+        && isValidClassroomJoinCode(incoming())
+        && incoming().classJoinCode == classJoinCode
+        && incoming().teacherUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isActiveTeacherOfClass(incoming().classId);
+      allow update: if isVerified()
+        && isValidId(classJoinCode)
+        && isValidClassroomJoinCode(incoming())
+        && incoming().classJoinCode == existing().classJoinCode
+        && incoming().classId == existing().classId
+        && incoming().schoolId == existing().schoolId
+        && incoming().teacherUid == request.auth.uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && isActiveTeacherOfClass(existing().classId);
+      allow delete: if isVerified() && isActiveTeacherOfClass(existing().classId);
+    }
+
+    match /classroom_rosters/{classId} {
+      allow get: if isValidId(classId)
+        && (isClassroomWindowOpen(classId) || isTakeHomeAllowed(classId) || (isSignedIn() && isActiveTeacherOfClass(classId)));
+      allow list: if false;
+      allow create: if isVerified()
+        && isValidId(classId)
+        && isValidClassroomRoster(incoming())
+        && incoming().classId == classId
+        && incoming().teacherUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isActiveTeacherOfClass(classId);
+      allow update: if isVerified()
+        && isValidId(classId)
+        && isValidClassroomRoster(incoming())
+        && incoming().classId == existing().classId
+        && incoming().schoolId == existing().schoolId
+        && incoming().teacherUid == request.auth.uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && isActiveTeacherOfClass(classId);
+      allow delete: if false;
+    }
+
+    match /school_pseudo_bindings/{pseudoHash} {
+      // Keyed strictly by SHA-256 hash — zero raw Google UID or email stored!
+      allow get: if isSignedIn() && isHex64(pseudoHash);
+      allow list: if false;
+      allow create: if isVerified()
+        && isHex64(pseudoHash)
+        && isValidSchoolPseudoBinding(incoming())
+        && incoming().pseudoHash == pseudoHash
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (isClassroomWindowOpen(incoming().classId) || isTakeHomeAllowed(incoming().classId));
+      allow update: if false;
+      allow delete: if isVerified()
+        && isHex64(pseudoHash)
+        && isActiveTeacherOfClass(existing().classId);
+    }
+
+    match /student_qr_cards/{qrTokenHash} {
+      // Capability get by 256-bit SHA-256 QR token hash (list restricted strictly to issuing admin/teacher)
+      allow get: if isHex64(qrTokenHash);
+      allow list: if isSignedIn()
+        && (resource.data.adminUid == request.auth.uid || resource.data.teacherUid == request.auth.uid);
+      allow create: if isVerified()
+        && isHex64(qrTokenHash)
+        && isValidStudentQrCard(incoming())
+        && incoming().qrTokenHash == qrTokenHash
+        && incoming().status == 'active'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (isActiveTeacherOfClass(incoming().classId) || isSchoolAdmin(incoming().schoolId));
+      allow update: if isVerified()
+        && isHex64(qrTokenHash)
+        && isValidStudentQrCard(incoming())
+        && incoming().qrTokenHash == existing().qrTokenHash
+        && incoming().schoolId == existing().schoolId
+        && incoming().studentId == existing().studentId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (isActiveTeacherOfClass(existing().classId) || isSchoolAdmin(existing().schoolId))
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'participationOptOut', 'classId', 'className', 'attendanceNumber', 'grade', 'gradeBand', 'updatedAt']);
+      allow delete: if isVerified()
+        && isHex64(qrTokenHash)
+        && (isActiveTeacherOfClass(existing().classId) || isSchoolAdmin(existing().schoolId));
+    }
+
+    match /student_play_tickets/{ticketId} {
+      allow get: if false;
+      allow list: if false;
+      allow create: if isValidId(ticketId)
+        && isValidStudentPlayTicket(incoming())
+        && incoming().ticketId == ticketId
+        && incoming().createdAt == request.time
+        && incoming().expiresAt > request.time
+        && (
+          (incoming().mode == 'classroom' && isClassroomWindowOpen(incoming().classId))
+          ||
+          (incoming().mode == 'take_home' && isTakeHomeAllowed(incoming().classId))
+        )
+        && (
+          (incoming().authMethod == 'pseudo'
+            && isVerified()
+            && exists(/databases/$(database)/documents/school_pseudo_bindings/$(incoming().authProofHash))
+            && get(/databases/$(database)/documents/school_pseudo_bindings/$(incoming().authProofHash)).data.studentId == incoming().studentId
+            && get(/databases/$(database)/documents/school_pseudo_bindings/$(incoming().authProofHash)).data.classId == incoming().classId)
+          ||
+          (incoming().authMethod == 'qr'
+            && exists(/databases/$(database)/documents/student_qr_cards/$(incoming().authProofHash))
+            && get(/databases/$(database)/documents/student_qr_cards/$(incoming().authProofHash)).data.status == 'active'
+            && get(/databases/$(database)/documents/student_qr_cards/$(incoming().authProofHash)).data.studentId == incoming().studentId
+            && get(/databases/$(database)/documents/student_qr_cards/$(incoming().authProofHash)).data.classId == incoming().classId)
+        );
+      allow update, delete: if false;
+    }
+
+    match /student_rewards/{studentId} {
+      allow get: if isValidId(studentId)
+        && (
+          resource == null
+          || (isSignedIn() && (isActiveTeacherOfClass(existing().classId) || isApprovedParentOfStudent(studentId)))
+          || (existing().schoolId != '' && (isClassroomWindowOpen(existing().classId) || isTakeHomeAllowed(existing().classId)))
+        );
+      allow list: if false;
+      allow create: if isValidId(studentId)
+        && isValidStudentReward(incoming())
+        && incoming().studentId == studentId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (incoming().schoolId == '' || isStudentNotOptedOut(studentId))
+        && (
+          (isVerified() && (isActiveTeacherOfClass(incoming().classId) || isApprovedParentOfStudent(studentId)))
+          ||
+          ('lastPlayTicketId' in incoming()
+            && isStudentNotOptedOut(studentId)
+            && hasValidAnyPlaceTicket(incoming().lastPlayTicketId, studentId, incoming().schoolId, incoming().classId))
+        );
+      allow update: if isValidId(studentId)
+        && isValidStudentReward(incoming())
+        && incoming().studentId == existing().studentId
+        && incoming().schoolId == existing().schoolId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (existing().schoolId == '' || isStudentNotOptedOut(studentId))
+        && (
+          (isVerified() && (isActiveTeacherOfClass(existing().classId) || isApprovedParentOfStudent(studentId)))
+          ||
+          ('lastPlayTicketId' in incoming()
+            && isStudentNotOptedOut(studentId)
+            && hasValidAnyPlaceTicket(incoming().lastPlayTicketId, studentId, existing().schoolId, existing().classId))
+        );
+      allow delete: if isVerified()
+        && isValidId(studentId)
+        && (
+          (existing().schoolId != '' && isSchoolAdmin(existing().schoolId))
+          || (existing().schoolId == '' && isApprovedParentOfStudent(studentId))
+        );
+    }
+
+    // =========================================================================
+    // Private Parent Followup & School Audit Access Logs
+    // =========================================================================
+
+    match /parent_followups/{followupId} {
+      allow get: if isSignedIn()
+        && isValidId(followupId)
+        && (resource == null || existing().parentUid == request.auth.uid);
+      allow list: if isSignedIn() && resource.data.parentUid == request.auth.uid;
+      allow create: if isVerified()
+        && isValidId(followupId)
+        && isValidParentFollowup(incoming())
+        && incoming().followupId == followupId
+        && incoming().parentUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isApprovedParentOfStudent(incoming().studentId);
+      allow update: if isVerified()
+        && isValidId(followupId)
+        && isValidParentFollowup(incoming())
+        && existing().parentUid == request.auth.uid
+        && incoming().followupId == existing().followupId
+        && incoming().parentUid == existing().parentUid
+        && incoming().studentId == existing().studentId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['currentSituation', 'memoHelpful', 'consentForImprovement', 'updatedAt']);
+      allow delete: if isVerified() && isValidId(followupId) && existing().parentUid == request.auth.uid;
+    }
+
+    match /access_logs/{logId} {
+      allow get: if isSignedIn()
+        && isValidId(logId)
+        && resource != null
+        && (existing().adminUid == request.auth.uid || existing().actorUid == request.auth.uid);
+      allow list: if isSignedIn()
+        && (resource.data.adminUid == request.auth.uid || resource.data.actorUid == request.auth.uid);
+      allow create: if isVerified()
+        && isValidId(logId)
+        && isValidAccessLog(incoming())
+        && incoming().logId == logId
+        && incoming().actorUid == request.auth.uid
+        && incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+  }
+}
