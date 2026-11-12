@@ -2068,9 +2068,9 @@ export const ParentDashboard: React.FC<{
             {navTab === 'directory_medical' && (
               <div className="space-y-6">
                 {/* 1. Mandatory Emergency Banner at Very Top */}
-                <div className="rounded-2xl border border-[#B83227]/35 bg-[#FDF1F0] p-4 text-sm font-bold leading-relaxed text-[#B83227]">
+                <div className="rounded-2xl border border-[#DFD5C5] bg-[#FAF5EC] p-4 text-xs font-bold leading-relaxed text-[#5C4F40]">
                   <div className="flex items-start gap-2.5">
-                    <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#8A755E]" />
                     <span>{EMERGENCY_TOP_BANNER_TEXT}</span>
                   </div>
                 </div>

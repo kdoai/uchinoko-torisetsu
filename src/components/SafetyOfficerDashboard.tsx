@@ -105,7 +105,7 @@ export const SafetyOfficerDashboard: React.FC<{
     return {
       level: 'primary' as const,
       label: `第1段階（主担当：${workspace?.school.primaryOfficerLabel || '主担当'} 確認時間内）`,
-      colorClass: 'border-[#B83227]/40 bg-[#FDF1F0] text-[#B83227]',
+      colorClass: 'border-[#E5C9A8] bg-[#FFF8EF] text-[#7A4B1E]',
     };
   };
 
@@ -180,7 +180,7 @@ export const SafetyOfficerDashboard: React.FC<{
       <header className="border-b border-[#EAE2D3] bg-white/92 backdrop-blur-sm">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#FDF1F0] text-[#B83227]">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#EAF5F4] text-[#1F5C59]">
               <ShieldAlert className="h-5 w-5" />
             </div>
             <div>
@@ -217,10 +217,10 @@ export const SafetyOfficerDashboard: React.FC<{
 
       <main className="mx-auto max-w-6xl px-4 py-7 sm:px-6">
         {/* Mandatory Statutory Duty & Emergency Banner (Chapter 12B) */}
-        <div className="mb-6 rounded-3xl border border-[#B83227]/25 bg-white p-5 shadow-[0_6px_24px_rgba(92,74,50,0.04)]">
+        <div className="mb-6 rounded-3xl border border-[#DFD5C5] bg-white p-5 shadow-[0_6px_24px_rgba(92,74,50,0.04)]">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="space-y-1.5">
-              <div className="flex items-center gap-2 text-sm font-bold text-[#B83227]">
+              <div className="flex items-center gap-2 text-sm font-bold text-[#1F5C59]">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
                 <span>
                   児童虐待防止法にもとづく通告義務・緊急連絡の確認（保護者へは自動通知されません）
@@ -238,10 +238,10 @@ export const SafetyOfficerDashboard: React.FC<{
             <div className="flex flex-wrap gap-2">
               <a
                 href="tel:189"
-                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-[#B83227] px-4 py-2 text-xs font-bold text-white whitespace-nowrap tabular-nums transition-colors hover:bg-[#9C281E]"
+                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-[#2B6E6B] px-4 py-2 text-xs font-bold text-white whitespace-nowrap tabular-nums transition-colors hover:bg-[#1F5C59]"
               >
                 <Phone className="h-3.5 w-3.5" />
-                児相虐待対応：189
+                児相相談ダイヤル：189
               </a>
               <a
                 href="tel:119"
@@ -254,8 +254,8 @@ export const SafetyOfficerDashboard: React.FC<{
         </div>
 
         {unconfirmedCount > 0 && (
-          <div className="mb-5 rounded-2xl border-2 border-[#B83227] bg-[#FDF1F0] px-4 py-3 text-sm font-bold text-[#B83227] tabular-nums">
-            未対応・確認が必要な安全連絡が {unconfirmedCount} 件あります（画面の一番上に固定表示されています）。
+          <div className="mb-5 rounded-2xl border border-[#BCE0DD] bg-[#EAF5F4] px-4 py-3 text-sm font-bold text-[#1F5C59] tabular-nums">
+            確認中の安全連絡が {unconfirmedCount} 件あります（保護者画面には非表示・最上部に固定表示）。
           </div>
         )}
 
